@@ -186,15 +186,22 @@ class SalarySlipController {
       // Sort descending (latest month first)
       resultSlips.sort((a, b) => b.month.localeCompare(a.month));
 
-      return res.json({
+      const payload = {
         fy,
         empId,
         salary_structure: structure,
         slips: resultSlips
+      };
+
+      return res.status(200).json({
+        success: true,
+        message: 'Salary slips retrieved successfully',
+        data: payload,
+        ...payload
       });
     } catch (err) {
       console.error('getEmployeeSlips error:', err);
-      return res.status(500).json({ error: 'Failed to fetch salary slips' });
+      return res.status(500).json({ success: false, error: 'Failed to fetch salary slips' });
     }
   }
 
@@ -250,15 +257,21 @@ class SalarySlipController {
       };
 
       const saved = await salarySlipModel.upsert(slipData);
-      return res.status(201).json({
+      const slipResponse = {
         ...saved,
         earnings_breakdown: earnings,
         deductions_breakdown: deductions,
         is_generated: true
+      };
+      return res.status(201).json({
+        success: true,
+        message: 'Salary slip generated successfully',
+        data: slipResponse,
+        ...slipResponse
       });
     } catch (err) {
       console.error('generateSlip error:', err);
-      return res.status(500).json({ error: 'Failed to generate salary slip' });
+      return res.status(500).json({ success: false, error: 'Failed to generate salary slip' });
     }
   }
 
@@ -276,7 +289,7 @@ class SalarySlipController {
 
       const updated = await salarySlipModel.update(id, updates);
       if (!updated) {
-        return res.status(404).json({ error: 'Salary slip not found' });
+        return res.status(404).json({ success: false, error: 'Salary slip not found' });
       }
 
       let earnings = updated.earnings_breakdown;
@@ -288,15 +301,21 @@ class SalarySlipController {
         try { deductions = JSON.parse(deductions); } catch (e) { deductions = []; }
       }
 
-      return res.json({
+      const slipResponse = {
         ...updated,
         earnings_breakdown: earnings,
         deductions_breakdown: deductions,
         is_generated: true
+      };
+      return res.status(200).json({
+        success: true,
+        message: 'Salary slip updated successfully',
+        data: slipResponse,
+        ...slipResponse
       });
     } catch (err) {
       console.error('updateSlip error:', err);
-      return res.status(500).json({ error: 'Failed to update salary slip' });
+      return res.status(500).json({ success: false, error: 'Failed to update salary slip' });
     }
   }
 

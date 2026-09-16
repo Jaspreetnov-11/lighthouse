@@ -206,9 +206,10 @@
   .tabs{display:flex; gap:22px; border-bottom:1px solid var(--line); padding:0 4px}
   .tabs button{background:none; border:0; padding:12px 2px; font:inherit; font-size:13.5px; color:var(--t4); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px}
   .tabs button.on{color:var(--accent); border-color:var(--accent); font-weight:600}
-  .search{position:relative}
-  .search input{height:40px; padding-left:36px; font-size:13px; border-radius:100px}
-  .search svg{position:absolute; left:13px; top:12px; width:16px;height:16px; color:#8A8A94}
+  .search{position:relative; display:flex; align-items:center}
+  .search input,
+  .search input:not([type=checkbox]):not([type=radio]){height:40px; padding-left:42px !important; padding-right:14px; font-size:13px; border-radius:100px}
+  .search svg{position:absolute; left:14px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:#8A8A94; pointer-events:none}
   .sq{width:40px;height:40px;border:1.5px solid var(--line);border-radius:100px;background:var(--ov-04);display:grid;place-items:center;color:var(--t1);cursor:pointer}
   .sq:hover{background:var(--ov-01)}
   .sq svg{width:16px;height:16px}

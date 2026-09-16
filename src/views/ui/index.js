@@ -105,7 +105,17 @@ export function LinkBtn({ children, onClick, href, style }) {
 }
 
 export function Search({ value, onChange, placeholder, style }) {
-  return <div className="search" style={style}><Icon name="search" /><input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || 'Search'} /></div>;
+  return (
+    <div className="search" style={style}>
+      <Icon name="search" />
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder || 'Search'}
+        style={{ paddingLeft: 42 }}
+      />
+    </div>
+  );
 }
 
 export function TaskChip({ status }) {

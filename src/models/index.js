@@ -181,8 +181,9 @@ AiModel.scheduleLatest = () => data(api.get('/ai/schedule/latest'));
 AiModel.runState = (id, done) => data(api.patch('/ai/history/' + id + '/state', { done }));
 
 export const SalarySlipModel = {
-  list: (empId, fy) => data(api.get('/salary-slips/' + empId, fy ? { fy } : undefined)),
-  generate: body => data(api.post('/salary-slips/generate', body)),
-  update: (id, body) => data(api.put('/salary-slips/' + id, body)),
+  list: (empId, fy) => api.get('/salary-slips/' + empId, fy ? { fy } : undefined).then(r => (r && r.data) || r),
+  generate: body => api.post('/salary-slips/generate', body).then(r => (r && r.data) || r),
+  update: (id, body) => api.put('/salary-slips/' + id, body).then(r => (r && r.data) || r),
   remove: id => api.del('/salary-slips/' + id)
 };
+

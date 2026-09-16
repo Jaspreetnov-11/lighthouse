@@ -55,6 +55,7 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
   const [selectedAddMonth, setSelectedAddMonth] = useState('');
   const [generating, setGenerating] = useState(false);
   const [showVariablesModal, setShowVariablesModal] = useState(null); // slip object
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
 
   const fetchSlips = useCallback(async () => {
     if (!employee?.id) return;
@@ -62,11 +63,17 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
     try {
       const fyRaw = selectedFY.replace('FY ', '');
       const res = await SalarySlipModel.list(employee.id, fyRaw);
-      const list = (res && res.slips) || [];
+      const dataObj = res?.data || res;
+      const list = dataObj?.slips || (Array.isArray(dataObj) ? dataObj : []);
       setSlips(list);
-      // Auto-expand latest month
+      // Auto-expand latest month by default if not set
       if (list.length > 0) {
-        setExpandedMonths(prev => ({ ...prev, [list[0].month]: true }));
+        setExpandedMonths(prev => {
+          if (Object.keys(prev).length === 0) {
+            return { [list[0].month]: true };
+          }
+          return prev;
+        });
       }
     } catch (err) {
       toast(err.message || 'Failed to fetch salary slips');
@@ -83,12 +90,44 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
     setExpandedMonths(prev => ({ ...prev, [month]: !prev[month] }));
   };
 
+  const handleExportCSV = () => {
+    if (!slips.length) {
+      toast('No salary records to export');
+      return;
+    }
+    const headers = ['Month', 'Employee', 'Emp ID', 'Gross Earnings', 'Total Deductions', 'Net Payable', 'Paid Amount', 'Due Amount', 'Payable Days', 'Status'];
+    const rows = slips.map(s => [
+      formatMonthLabel(s.month),
+      `"${employee.name}"`,
+      employee.emp_id || '',
+      s.gross_earnings || 0,
+      s.total_deductions || 0,
+      s.net_payable || 0,
+      s.paid_amount || 0,
+      s.due_amount || 0,
+      s.payable_days || 0,
+      s.status || 'pending'
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Salary_Overview_${employee.name.replace(/\s+/g, '_')}_${selectedFY.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast('Salary records exported to CSV.');
+    setShowActionsMenu(false);
+  };
+
   const handleGenerateSlip = async (monthToGen) => {
     if (!isAdmin) {
       toast('Only administrators can generate salary slips.');
       return;
     }
-    const targetMonth = monthToGen || (slips.length > 0 ? slips[0].month : null);
+    const curMonth = new Date().toISOString().slice(0, 7);
+    const targetMonth = monthToGen || (slips.length > 0 ? slips[0].month : curMonth);
     if (!targetMonth) {
       toast('No month available to generate slip.');
       return;
@@ -274,7 +313,7 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
         </div>
 
         {/* Right: Actions, Add Previous Month, Generate Salary Slip */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', position: 'relative' }}>
           {isAdmin && (
             <>
               <button
@@ -289,7 +328,7 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
               <button
                 type="button"
                 className="tb-btn solid"
-                disabled={generating || slips.length === 0}
+                disabled={generating}
                 onClick={() => handleGenerateSlip(slips[0]?.month)}
                 style={{ height: 36, padding: '0 16px', fontSize: 13, gap: 6, display: 'inline-flex', alignItems: 'center' }}
               >
@@ -299,19 +338,117 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
             </>
           )}
 
-          <button
-            type="button"
-            className="tb-btn"
-            onClick={() => {
-              if (slips.length > 0) handlePrintSlip(slips[0]);
-              else toast('No slips to print');
-            }}
-            title="Print or download latest slip"
-            style={{ height: 36, padding: '0 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            <Icon name="download" size={14} />
-            Actions ▾
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className="tb-btn"
+              onClick={() => setShowActionsMenu(prev => !prev)}
+              title="More actions"
+              style={{ height: 36, padding: '0 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <Icon name="download" size={14} />
+              Actions ▾
+            </button>
+
+            {showActionsMenu && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: '100%',
+                  marginTop: 6,
+                  background: 'var(--panel)',
+                  border: '1px solid var(--line-soft)',
+                  borderRadius: 10,
+                  padding: '6px',
+                  minWidth: 200,
+                  boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
+                  zIndex: 30,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    if (slips.length > 0) handlePrintSlip(slips[0]);
+                    else toast('No slips to print');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 12px',
+                    fontSize: 13,
+                    color: 'var(--text)',
+                    background: 'none',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    width: '100%'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--field)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                >
+                  <Icon name="file" size={14} />
+                  Print Latest Slip
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 12px',
+                    fontSize: 13,
+                    color: 'var(--text)',
+                    background: 'none',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    width: '100%'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--field)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                >
+                  <Icon name="download" size={14} />
+                  Export CSV ({selectedFY})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    fetchSlips();
+                    toast('Reloaded salary slips');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 12px',
+                    fontSize: 13,
+                    color: 'var(--text)',
+                    background: 'none',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    width: '100%'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--field)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                >
+                  <Icon name="cal" size={14} />
+                  Refresh All Months
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -331,8 +468,8 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {slips.map((slip) => {
-            const isOpen = expandedMonths[slip.month] !== false; // default open or toggled
-            const isPaid = slip.status === 'paid' || Number(slip.due_amount) === 0;
+            const isOpen = Boolean(expandedMonths[slip.month]);
+            const isPaid = slip.status === 'paid' || (Number(slip.due_amount) === 0 && Number(slip.paid_amount) > 0 && Number(slip.net_payable) > 0);
             const isPartiallyPaid = !isPaid && Number(slip.paid_amount) > 0;
             const statusText = isPaid ? 'Paid' : isPartiallyPaid ? 'Partially Paid' : 'Pending';
             const statusDotColor = isPaid ? '#4ADE95' : isPartiallyPaid ? '#FFB84D' : '#F59E0B';
@@ -365,6 +502,8 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
                     flexWrap: 'wrap',
                     gap: 16
                   }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
                   {/* Left: Blue Icon Badge + Month + Pill + Subtitle */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -424,7 +563,7 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 2 }}>Due Amount</div>
                       <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--text)' }}>
-                        {inr(slip.due_amount)}
+                        {inr(slip.due_amount || 0)}
                       </div>
                     </div>
 
@@ -460,7 +599,8 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
                           justifyContent: 'space-between',
                           alignItems: 'center',
                           paddingBottom: 10,
-                          marginBottom: 12
+                          marginBottom: 12,
+                          borderBottom: '1px solid var(--line-soft)'
                         }}>
                           <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
                             Earnings
@@ -493,7 +633,8 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
                           justifyContent: 'space-between',
                           alignItems: 'center',
                           marginTop: 18,
-                          paddingTop: 10,
+                          paddingTop: 12,
+                          borderTop: '1px solid var(--line-soft)',
                           fontSize: 14,
                           fontWeight: 700,
                           color: 'var(--text)'
@@ -511,7 +652,8 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
                           justifyContent: 'space-between',
                           alignItems: 'center',
                           paddingBottom: 10,
-                          marginBottom: 12
+                          marginBottom: 12,
+                          borderBottom: '1px solid var(--line-soft)'
                         }}>
                           <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
                             Deductions
@@ -521,7 +663,7 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
                           </span>
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 70 }}>
                           {(slip.deductions_breakdown || [])
                             .filter(dItem => Number(dItem.amount) > 0)
                             .map((dItem, idx) => (
@@ -538,7 +680,8 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
                           justifyContent: 'space-between',
                           alignItems: 'center',
                           marginTop: 18,
-                          paddingTop: 10,
+                          paddingTop: 12,
+                          borderTop: '1px solid var(--line-soft)',
                           fontSize: 14,
                           fontWeight: 700,
                           color: 'var(--text)'
@@ -610,22 +753,60 @@ export function StaffSalaryOverview({ employee, onNavigateToStructure }) {
                       </div>
                     </div>
 
-                    {/* Bottom Footer Bar (Matching Reference Image 2nd Snap Exactly) */}
+                    {/* Bottom Footer Bar (Matching Reference Image) */}
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      padding: '14px 24px',
+                      padding: '16px 24px',
                       background: 'rgba(255,255,255,0.02)',
                       borderTop: '1px solid var(--line-soft)',
                       flexWrap: 'wrap',
                       gap: 12
                     }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)' }}>
                         Due Amount : {inr(slip.due_amount || 0)}
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+                        {isAdmin && Number(slip.due_amount) > 0 && (
+                          <button
+                            type="button"
+                            className="tb-btn"
+                            onClick={() => handleMarkAsPaid(slip)}
+                            style={{
+                              height: 30,
+                              padding: '0 12px',
+                              fontSize: 12.5,
+                              color: 'var(--success, #4ADE95)',
+                              borderColor: 'rgba(74,222,149,0.3)',
+                              background: 'rgba(74,222,149,0.08)'
+                            }}
+                          >
+                            Mark Paid
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handlePrintSlip(slip)}
+                          title="Print Salary Slip"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--muted)',
+                            cursor: 'pointer',
+                            padding: '4px 6px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            fontSize: 13
+                          }}
+                        >
+                          <Icon name="file" size={14} />
+                          Print Slip
+                        </button>
+
                         {onNavigateToStructure && (
                           <button
                             type="button"
