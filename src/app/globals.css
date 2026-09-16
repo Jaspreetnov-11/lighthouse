@@ -81,6 +81,7 @@
   .field.invalid input,.field.invalid textarea,.field.invalid select{border-color:var(--danger); box-shadow:0 0 0 4px rgba(255,92,122,.14)}
   .error{display:none; font-size:11.5px; color:var(--danger); margin-top:-2px}
   .field.invalid .error{display:block}
+  .control{position:relative; width:100%; display:flex; align-items:center}
   .eye{position:absolute; right:6px; top:50%; transform:translateY(-50%); width:38px;height:38px; border:0; background:none; border-radius:10px; cursor:pointer; color:#8A8A94; display:grid; place-items:center}
   .eye:hover{background:var(--ov-08); color:var(--accent)}
   .eye svg{width:20px;height:20px}

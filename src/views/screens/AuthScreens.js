@@ -81,7 +81,7 @@ export function LoginScreen() {
         <Field id="email" label="Email Address" type="email" value={email} onChange={v => { setEmail(v); setErr({}); }} placeholder="Enter email" error={err.email} autoComplete="email" />
         <div className={'field' + (err.pw ? ' invalid' : '')}>
           <div className="label-row"><label htmlFor="password">Password</label><button type="button" className="link" onClick={() => { setResetEmail(email); setReset(true); }}>Forgot Password?</button></div>
-          <div className="control">
+          <div className="control" style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
             <input id="password" className="pw" type={showPw ? 'text' : 'password'} value={pw} onChange={e => { setPw(e.target.value); setErr({}); }} placeholder="Enter password" autoComplete="current-password" />
             <button type="button" className="eye" aria-label={showPw ? 'Hide password' : 'Show password'} onClick={() => setShowPw(s => !s)} style={{ color: showPw ? 'var(--accent)' : undefined }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
