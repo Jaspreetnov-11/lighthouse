@@ -146,7 +146,8 @@ export function StaffListScreen() {
 
 export function StaffProfileScreen({ id }) {
   const d = useData();
-  const { me, isAdmin } = useAuth();
+  const { me, isAdmin, isHR, canManageStaff } = useAuth();
+  const canViewPayrollTabs = isAdmin || isHR || canManageStaff;
   const { toast, confirm } = useUi();
   const modals = useModals();
   const router = useRouter();
@@ -273,14 +274,14 @@ export function StaffProfileScreen({ id }) {
               <span><b>Department:</b> {e.dept || '—'}</span><span className="sep">|</span>
               <span><b>Joined:</b> {fmtDY(e.joined)}</span><span className="sep">|</span>
               <span><b>Shift:</b> {e.shift === 'evening' ? '2 pm – 10 pm' : '11 am – 7 pm'}</span>
-              {isAdmin && <><span className="sep">|</span><span><b>Salary:</b> {inr(e.salary)} / month</span></>}<span className="sep">|</span>
+              {canViewPayrollTabs && <><span className="sep">|</span><span><b>Salary:</b> {inr(e.salary)} / month</span></>}<span className="sep">|</span>
               <span><b>Managers:</b></span>
               {(Array.isArray(e.managers) ? e.managers : []).map(m => <span className="mgr" key={m}><span className={'avatar sm ' + avFor(m)}>{ini(m)}</span>{m}</span>)}
               {!(Array.isArray(e.managers) && e.managers.length) && <span>—</span>}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {isAdmin && <DateBtn icon={null} onClick={() => modals.open('payment', null, { emp: e.id })}>+ Payment</DateBtn>}
+            {canViewPayrollTabs && <DateBtn icon={null} onClick={() => modals.open('payment', null, { emp: e.id })}>+ Payment</DateBtn>}
             {d.canAssign && isActive && <DateBtn icon={null} onClick={() => modals.open('task', null, { assignee: e.id, dept: e.dept })}>+ Task</DateBtn>}
             {(isAdmin || me.id === e.id) && <Sq icon="file" label="Edit" onClick={() => modals.open('employee', e.id)} />}
             {isAdmin && (
@@ -300,27 +301,36 @@ export function StaffProfileScreen({ id }) {
           </div>
         </div>
 
-        {/* Staff Profile Sub-Navigation Tabs (Snapshot 1) */}
-        <div className="tabs" style={{ margin: '14px 0 20px', overflowX: 'auto', borderBottom: '1px solid var(--line-soft)', paddingBottom: 0 }}>
-          {[
+        {/* Staff Profile Sub-Navigation Tabs */}
+        {(() => {
+          const availableTabs = [
             ['profile', 'Profile'],
             ['attendance', 'Attendance'],
-            ['salary_overview', 'Salary Overview'],
-            ['salary_structure', 'Salary Structure'],
-            ['loans', 'Loans'],
+            ...(canViewPayrollTabs ? [
+              ['salary_overview', 'Salary Overview'],
+              ['salary_structure', 'Salary Structure'],
+              ['loans', 'Loans']
+            ] : []),
             ['leaves', 'Leave(s)']
-          ].map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              className={subTab === k ? 'on' : ''}
-              onClick={() => setSubTab(k)}
-              style={{ whiteSpace: 'nowrap', padding: '10px 16px', fontSize: 13.5 }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+          ];
+          const activeSubTab = availableTabs.some(([k]) => k === subTab) ? subTab : 'profile';
+
+          return (
+            <div className="tabs" style={{ margin: '14px 0 20px', overflowX: 'auto', borderBottom: '1px solid var(--line-soft)', paddingBottom: 0 }}>
+              {availableTabs.map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={activeSubTab === k ? 'on' : ''}
+                  onClick={() => setSubTab(k)}
+                  style={{ whiteSpace: 'nowrap', padding: '10px 16px', fontSize: 13.5 }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
 
         {subTab === 'profile' && (
           <>
@@ -346,14 +356,14 @@ export function StaffProfileScreen({ id }) {
           <StaffAttendanceTab employee={e} />
         )}
 
-        {subTab === 'salary_overview' && (
+        {subTab === 'salary_overview' && canViewPayrollTabs && (
           <StaffSalaryOverview
             employee={e}
             onNavigateToStructure={() => setSubTab('salary_structure')}
           />
         )}
 
-        {subTab === 'salary_structure' && (
+        {subTab === 'salary_structure' && canViewPayrollTabs && (
           <StaffSalaryStructure
             employee={e}
             onCancel={() => setSubTab('salary_overview')}
@@ -361,7 +371,7 @@ export function StaffProfileScreen({ id }) {
           />
         )}
 
-        {subTab === 'loans' && (
+        {subTab === 'loans' && canViewPayrollTabs && (
           <StaffLoansTab employee={e} />
         )}
 

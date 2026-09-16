@@ -68,14 +68,29 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => { setToken(''); try { localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ } setSession(null); }, []);
   const refreshMe = useCallback(async () => { try { const res = await AuthModel.me(); const s = { user: res.user, me: normalizeEmployee(res.user, res.employee) }; setSession(s); localStorage.setItem(AUTH_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ } }, []);
 
-  const value = useMemo(() => ({
-    ready,
-    isAuthed: !!session,
-    user: session ? session.user : null,
-    me: session ? session.me : null,
-    isAdmin: !!session && (session.me.access === 'admin' || (session.user && session.user.role === 'admin')),
-    login, register, logout, refreshMe
-  }), [ready, session, login, register, logout, refreshMe]);
+  const value = useMemo(() => {
+    const isAdm = !!session && (session.me.access === 'admin' || (session.user && session.user.role === 'admin'));
+    const isHr = !!session && (
+      session.me.access === 'hr' ||
+      (session.user && session.user.role === 'hr') ||
+      (session.me.dept || '').toLowerCase() === 'hr' ||
+      (session.me.dept || '').toLowerCase().includes('human resource') ||
+      (session.me.role || '').toLowerCase() === 'hr' ||
+      (session.me.role || '').toLowerCase().includes('human resource') ||
+      (session.me.role || '').toLowerCase().includes('hr manager') ||
+      (session.me.role || '').toLowerCase().includes('hr executive')
+    );
+    return {
+      ready,
+      isAuthed: !!session,
+      user: session ? session.user : null,
+      me: session ? session.me : null,
+      isAdmin: isAdm,
+      isHR: isHr,
+      canManageStaff: isAdm || isHr,
+      login, register, logout, refreshMe
+    };
+  }, [ready, session, login, register, logout, refreshMe]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
