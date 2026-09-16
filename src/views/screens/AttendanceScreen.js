@@ -186,9 +186,7 @@ export function AttendanceScreen() {
               <Seg items={[['all', 'All staff'], ['me', 'Me']]} value={tab} onChange={setTab} />
               <Chip
                 tone={unmarked <= 0 ? 'gr' : 'or'}
-                style={{ cursor: 'pointer' }}
-                onClick={() => setStatFilter(prev => prev === 'not_punched' ? 'all' : 'not_punched')}
-                title="Click to filter not punched / unmarked staff"
+                style={{ cursor: 'default', userSelect: 'none', pointerEvents: 'none' }}
               >
                 {unmarked <= 0 ? '✓ All marked' : unmarked + ' unmarked'}
               </Chip>
