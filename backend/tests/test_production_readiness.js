@@ -235,6 +235,53 @@ async function runTests() {
   console.log('   ✓ Self-task created, progressed, and deleted by staff user without 403 error');
 
   // ----------------------------------------------------
+  // TEST 5B: Task Workflow Progression & Column Shuffling
+  // ----------------------------------------------------
+  console.log('\n5B. Testing Task Workflow Progression & Column Shuffling:');
+  // Task tId is currently in pipeline for staff1
+  // Step 1: Staff 1 moves pipeline -> progress (accepts & starts)
+  const toProgressReq = mockReq(staff1, { status: 'progress' }, { id: tId });
+  const progRes = await callCtrl(taskController.updateTaskStatus, toProgressReq, mockRes());
+  assert.strictEqual(progRes.statusCode, 200);
+  assert.strictEqual(progRes.data.data.status, 'progress');
+  assert(progRes.data.data.started_at, 'started_at should be recorded on progress');
+
+  // Step 2: Staff 1 moves progress -> approval (submits for approval)
+  const toApprovalReq = mockReq(staff1, { status: 'approval' }, { id: tId });
+  const appRes = await callCtrl(taskController.updateTaskStatus, toApprovalReq, mockRes());
+  assert.strictEqual(appRes.statusCode, 200);
+  assert.strictEqual(appRes.data.data.status, 'approval');
+
+  // Step 3: Lead 1 moves approval -> completed (approved)
+  const toCompletedReq = mockReq(lead1, { status: 'completed' }, { id: tId });
+  const compRes = await callCtrl(taskController.updateTaskStatus, toCompletedReq, mockRes());
+  assert.strictEqual(compRes.statusCode, 200);
+  assert.strictEqual(compRes.data.data.status, 'completed');
+  assert(compRes.data.data.completed, 'completed date should be set');
+
+  // Step 4: Lead 1 moves completed -> changes (request changes on completed card)
+  const toChangesReq = mockReq(lead1, { status: 'changes' }, { id: tId });
+  const chgRes = await callCtrl(taskController.updateTaskStatus, toChangesReq, mockRes());
+  assert.strictEqual(chgRes.statusCode, 200);
+  assert.strictEqual(chgRes.data.data.status, 'changes');
+  assert.strictEqual(chgRes.data.data.completed, null, 'completed date should be cleared when moving to changes');
+
+  // Step 5: Staff 1 moves changes -> progress (resume)
+  const resumeReq = mockReq(staff1, { status: 'progress' }, { id: tId });
+  const resRes = await callCtrl(taskController.updateTaskStatus, resumeReq, mockRes());
+  assert.strictEqual(resRes.statusCode, 200);
+  assert.strictEqual(resRes.data.data.status, 'progress');
+
+  // Step 6: Shuffling freely into any section (e.g. progress -> pipeline)
+  const shuffleReq = mockReq(staff1, { status: 'pipeline' }, { id: tId });
+  const shufRes = await callCtrl(taskController.updateTaskStatus, shuffleReq, mockRes());
+  assert.strictEqual(shufRes.statusCode, 200);
+  assert.strictEqual(shufRes.data.data.status, 'pipeline');
+  assert.strictEqual(shufRes.data.data.started_at, null, 'started_at should be reset when shuffled back to pipeline');
+
+  console.log('   ✓ Full sequential workflow and arbitrary column shuffling verified');
+
+  // ----------------------------------------------------
   // TEST 6: Single Leader Project Backward Compatibility
   // ----------------------------------------------------
   console.log('\n6. Testing Single Leader Project Backward Compatibility:');

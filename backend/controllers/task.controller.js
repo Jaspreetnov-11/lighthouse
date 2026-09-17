@@ -49,7 +49,12 @@ function statusPatch(existing, status) {
   const patch = { status };
   const now = nowISO();
   if (status === 'progress' && !existing.started_at) patch.started_at = now;
-  if (status === 'completed') {
+  if (status === 'pipeline') {
+    patch.started_at = null;
+    patch.completed = null;
+    patch.completed_at = null;
+    patch.taken_mins = 0;
+  } else if (status === 'completed') {
     patch.completed = todayISO();
     patch.completed_at = now;
     patch.taken_mins = existing.started_at ? minsSince(existing.started_at) : 0;
@@ -139,17 +144,16 @@ const updateTaskStatus = catchAsync(async (req, res) => {
 
   const isAssignee = splitIds(existing.assignee).includes(req.user.id);
   const isCreator = existing.assigned_by === req.user.id;
-  let isLeader = req.user.role === 'admin' || isCreator;
+  const isAdminOrMgr = req.user.role === 'admin' || req.user.role === 'manager' || req.user.access === 'admin' || req.user.access === 'manager';
+  let isLeader = isAdminOrMgr || isCreator;
   if (!isLeader && existing.project) {
     const p = await projectModel.findById(existing.project);
     isLeader = Boolean(p && splitIds(p.manager).includes(req.user.id));
   }
-  // Assignees: accept, submit for approval, resume after changes. Leaders & Creators: everything.
-  const assigneeMoves = { pipeline: ['progress'], progress: ['approval'], changes: ['progress'] };
-  const allowed = isLeader || (isAssignee && (assigneeMoves[existing.status] || []).includes(status));
+  // Allow leaders, creators, managers, admins, and assignees to move/shuffle tasks across any column
+  const allowed = isLeader || isAssignee;
   if (!allowed) {
-    if (!isAssignee) throw new AppError('Only the team leader can move this task.', 403);
-    throw new AppError(status === 'completed' ? 'Submit the task for approval; the team leader marks it completed.' : 'You cannot move the task to this stage.', 403);
+    throw new AppError('Only the assignee, team leader, or admin can move this task.', 403);
   }
 
   const patch = statusPatch(existing, status);
@@ -168,8 +172,15 @@ const updateTaskStatus = catchAsync(async (req, res) => {
         if (mgrs.length) await activityModel.notify(mgrs, `"${existing.title}" is waiting for your approval`, { kind: 'task', link: '/tasks?task=' + existing.id, ref_type: 'task', ref_id: existing.id });
       }
     }
-  } else if (status === 'completed') await notifyAssignees(ids, updated, `"${existing.title}" was approved and marked completed`);
-  else if (status === 'changes') await notifyAssignees(ids, updated, `Changes requested on "${existing.title}"`);
+  } else if (status === 'completed') {
+    await activityModel.log(`${who} approved "${existing.title}"`);
+    await notifyAssignees(ids, updated, `"${existing.title}" was approved and marked completed`);
+  } else if (status === 'changes') {
+    await activityModel.log(`${who} requested changes on "${existing.title}"`);
+    await notifyAssignees(ids, updated, `Changes requested on "${existing.title}"`);
+  } else {
+    await activityModel.log(`${who} moved "${existing.title}" to ${status}`);
+  }
 
   return apiResponse.success(res, updated, `Task moved to ${status}`);
 });

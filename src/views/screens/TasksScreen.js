@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/controllers/AuthController';
 import { useData } from '@/controllers/DataController';
@@ -20,17 +20,35 @@ function useTaskActions() {
   return t => {
     const mine = assigneeIds(t).includes(me.id);
     const lead = isLeaderOf(t.project);
+    const isCreator = t.assigned_by === me.id;
+    const canManage = lead || isCreator || me.role === 'admin' || me.access === 'admin' || me.access === 'manager';
+    const canMove = mine || canManage;
     const acts = [];
-    if (t.status === 'pipeline' && mine) acts.push(['progress', '▶ Accept & start', 'go']);
-    if (t.status === 'progress' && mine) acts.push(['approval', 'Submit for approval', 'ok']);
-    if (t.status === 'changes' && mine) acts.push(['progress', '▶ Resume', 'go']);
-    if (t.status === 'approval' && lead) { acts.push(['completed', '✓ Approve', 'ok']); acts.push(['changes', 'Request changes', 'warn']); }
-    if (lead) STATUSES.filter(k => k !== t.status && !acts.some(a => a[0] === k)).forEach(k => acts.push([k, '→ ' + STATUS_LABEL[k], '']));
+
+    // Streamlined workflow progression:
+    // In Pipeline -> In Progress -> Pending Approval -> Completed -> Changes -> In Progress
+    if (canMove) {
+      if (t.status === 'pipeline') {
+        acts.push(['progress', '▶ In Progress', 'go']);
+      } else if (t.status === 'progress') {
+        acts.push(['approval', 'Pending Approval', 'ok']);
+      } else if (t.status === 'approval') {
+        acts.push(['completed', '✓ Completed', 'ok']);
+        if (canManage) {
+          acts.push(['changes', 'Changes', 'warn']);
+        }
+      } else if (t.status === 'completed') {
+        acts.push(['changes', '⇄ Changes', 'warn']);
+      } else if (t.status === 'changes') {
+        acts.push(['progress', '▶ In Progress', 'go']);
+      }
+    }
+
     const canReject = mine && t.status === 'pipeline' && Boolean(
       (t.reassigned_by && t.reassigned_by !== me.id) ||
       (t.assigned_by && t.assigned_by !== me.id)
     );
-    return { acts, mine, lead, canReject };
+    return { acts, mine, lead, canManage, canReject };
   };
 }
 
@@ -64,6 +82,89 @@ export function TasksScreen() {
   const [day, setDay] = useState(() => todayISO());
   const [month, setMonth] = useState(() => thisMonth());
   const [reassignTaskTarget, setReassignTaskTarget] = useState(null);
+  const boardRef = useRef(null);
+  const dragCoordRef = useRef({ x: 0, y: 0, active: false, hasMoved: false });
+
+  // Smooth auto-scroll while dragging cards near viewport edges (top, bottom, left, right)
+  useEffect(() => {
+    if (!dragId) {
+      dragCoordRef.current.active = false;
+      dragCoordRef.current.hasMoved = false;
+      return;
+    }
+
+    dragCoordRef.current.active = true;
+    let animId = null;
+
+    const onDragOverDoc = ev => {
+      if (typeof ev.clientY === 'number' && typeof ev.clientX === 'number') {
+        dragCoordRef.current.hasMoved = true;
+        dragCoordRef.current.x = ev.clientX;
+        dragCoordRef.current.y = ev.clientY;
+      }
+    };
+
+    const stopDrag = () => {
+      dragCoordRef.current.active = false;
+      dragCoordRef.current.hasMoved = false;
+      if (animId) cancelAnimationFrame(animId);
+      setDragId(null);
+      setOverCol('');
+    };
+
+    window.addEventListener('dragover', onDragOverDoc, { passive: true });
+    window.addEventListener('dragend', stopDrag);
+    window.addEventListener('drop', stopDrag);
+
+    const step = () => {
+      if (!dragCoordRef.current.active) return;
+
+      if (dragCoordRef.current.hasMoved) {
+        const { x, y } = dragCoordRef.current;
+        const vh = window.innerHeight || document.documentElement.clientHeight || 800;
+        const topEdge = 140; // trigger distance from top of viewport
+        const bottomEdge = 140; // trigger distance from bottom of viewport
+
+        // Vertical window / page scroll
+        if (y < topEdge) {
+          const factor = Math.min(2.5, Math.max(0.2, (topEdge - y) / topEdge));
+          const speed = Math.round(factor * 22);
+          window.scrollBy(0, -speed);
+        } else if (vh - y < bottomEdge) {
+          const factor = Math.min(2.5, Math.max(0.2, (bottomEdge - (vh - y)) / bottomEdge));
+          const speed = Math.round(factor * 22);
+          window.scrollBy(0, speed);
+        }
+
+        // Horizontal board scroll (if columns overflow horizontally)
+        if (boardRef.current) {
+          const bRect = boardRef.current.getBoundingClientRect();
+          const hEdge = 90;
+          if (x > bRect.left && x < bRect.left + hEdge) {
+            const factor = Math.min(2, Math.max(0.2, (bRect.left + hEdge - x) / hEdge));
+            boardRef.current.scrollLeft -= Math.round(factor * 20);
+          } else if (x < bRect.right && bRect.right - x < hEdge) {
+            const factor = Math.min(2, Math.max(0.2, (hEdge - (bRect.right - x)) / hEdge));
+            boardRef.current.scrollLeft += Math.round(factor * 20);
+          }
+        }
+      }
+
+      animId = requestAnimationFrame(step);
+    };
+
+    animId = requestAnimationFrame(step);
+
+    return () => {
+      dragCoordRef.current.active = false;
+      dragCoordRef.current.hasMoved = false;
+      if (animId) cancelAnimationFrame(animId);
+      window.removeEventListener('dragover', onDragOverDoc);
+      window.removeEventListener('dragend', stopDrag);
+      window.removeEventListener('drop', stopDrag);
+    };
+  }, [dragId]);
+
   // Opened from a notification (/tasks?task=ID): show everyone's tasks and highlight that card
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('task');
@@ -122,12 +223,39 @@ export function TasksScreen() {
 
   const card = t => {
     const od = overdue(t);
-    const { acts, lead, mine, canReject } = actionsFor(t);
-    const canReassign = (mine || lead) && t.status !== 'completed';
+    const { acts, lead, mine, canManage, canReject } = actionsFor(t);
+    const canReassign = (mine || lead || canManage) && t.status !== 'completed';
     const assignerName = t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : '');
     return (
-      <div className={'tcard' + (dragId === t.id ? ' dragging' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id} draggable={lead} onDragStart={ev => { if (!lead) { ev.preventDefault(); return; } setDragId(t.id); ev.dataTransfer.effectAllowed = 'move'; try { ev.dataTransfer.setData('text/plain', t.id); } catch (x) { /* ignore */ } }} onDragEnd={() => { setDragId(null); setOverCol(''); }}>
-        <div className="p"><span>{t.project_name || d.projName(t.project)}</span><span style={{ display: 'flex', gap: 4, alignItems: 'center' }}><i className={od ? 'r' : ''} title={od ? 'Overdue' : ''}><Icon name="flag" size={14} /></i>{canReassign && <button type="button" onClick={() => setReassignTaskTarget(t)} title="Reassign task" style={{ background: 'none', border: 0, color: 'var(--muted)', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }}>⇄</button>}{lead && <><button onClick={() => modals.open('task', t.id)} aria-label="Edit"><Icon name="edit" /></button><button onClick={() => del(t)} aria-label="Delete">✕</button></>}</span></div>
+      <div
+        className={'tcard' + (dragId === t.id ? ' dragging' : '') + (hl === t.id ? ' hl' : '')}
+        data-task={t.id}
+        key={t.id}
+        draggable={true}
+        onDragStart={ev => {
+          setDragId(t.id);
+          dragCoordRef.current.active = true;
+          dragCoordRef.current.hasMoved = true;
+          dragCoordRef.current.x = ev.clientX;
+          dragCoordRef.current.y = ev.clientY;
+          ev.dataTransfer.effectAllowed = 'move';
+          try { ev.dataTransfer.setData('text/plain', t.id); } catch (x) { /* ignore */ }
+        }}
+        onDragEnd={() => {
+          dragCoordRef.current.active = false;
+          dragCoordRef.current.hasMoved = false;
+          setDragId(null);
+          setOverCol('');
+        }}
+      >
+        <div className="p">
+          <span>{t.project_name || d.projName(t.project)}</span>
+          <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <i className={od ? 'r' : ''} title={od ? 'Overdue' : ''}><Icon name="flag" size={14} /></i>
+            {canReassign && <button type="button" onClick={() => setReassignTaskTarget(t)} title="Reassign task" style={{ background: 'none', border: 0, color: 'var(--muted)', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }}>⇄</button>}
+            {lead && <><button onClick={() => modals.open('task', t.id)} aria-label="Edit"><Icon name="edit" /></button><button onClick={() => del(t)} aria-label="Delete">✕</button></>}
+          </span>
+        </div>
         <small>{t.type || 'Other'}{t.dept ? ' · ' + t.dept : ''}</small>
         <div role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => setSheet(t.id)} title="Open task">{t.title}</div>
         {assignerName && (
@@ -236,9 +364,9 @@ export function TasksScreen() {
           {emps.map(e => <div className={'mem' + (member === e.id ? ' on' : '')} key={e.id} onClick={() => setMember(e.id)}><Avatar e={e} /><div>{e.name}<small>{e.role || ''}</small></div></div>)}
         </div>
         {view === 'board' ? (
-          <div className="board">
+          <div className="board" ref={boardRef}>
             {STATUSES.map(k => { const ts = tasks.filter(t => t.status === k); return (
-              <div className={'col ' + COL_CLS[k] + (overCol === k ? ' over' : '')} key={k} onDragOver={ev => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; setOverCol(k); }} onDragLeave={() => setOverCol('')} onDrop={ev => { ev.preventDefault(); const id = dragId || ev.dataTransfer.getData('text/plain'); setOverCol(''); setDragId(null); if (id) move(id, k); }}>
+              <div className={'col ' + COL_CLS[k] + (overCol === k ? ' over' : '')} key={k} onDragOver={ev => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; setOverCol(k); }} onDragLeave={ev => { if (ev.currentTarget.contains(ev.relatedTarget)) return; setOverCol(''); }} onDrop={ev => { ev.preventDefault(); const id = dragId || ev.dataTransfer.getData('text/plain'); setOverCol(''); setDragId(null); if (id) move(id, k); }}>
                 <div className="col-h">{STATUS_LABEL[k]}<span>{ts.length}</span></div>
                 {ts.map(card)}
                 {!ts.length && <div className="empty" style={{ padding: '24px 0', fontSize: 12 }}>{k === 'pipeline' ? 'No new tasks' : k === 'changes' ? 'No changes requested' : 'Nothing here'}</div>}
@@ -248,8 +376,8 @@ export function TasksScreen() {
           <div className="content"><div className="panel">
             <div className="task-row head"><span>Task</span><span>Project</span><span>Assignee</span><span>Assigned</span><span>Deadline</span><span>Est / Taken</span><span>Status</span><span>Action</span></div>
             {listPager.items.map(t => {
-              const { lead, mine, canReject } = actionsFor(t);
-              const canReassign = (mine || lead) && t.status !== 'completed';
+              const { acts, lead, mine, canManage, canReject } = actionsFor(t);
+              const canReassign = (mine || lead || canManage) && t.status !== 'completed';
               const assignerName = t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : '');
               return (
                 <div className="task-row" key={t.id}>
@@ -264,6 +392,11 @@ export function TasksScreen() {
                   <span>{hm(t.mins)} / {hm(takenMins(t, now))}</span>
                   <TaskChip status={t.status} />
                   <span>
+                    {acts.map(([k, l, cls]) => (
+                      <button key={k} className={cls === 'go' || cls === 'ok' ? 'pill on' : 'pill'} onClick={() => move(t.id, k)} style={{ fontSize: 11, padding: '2px 8px', marginRight: 6 }}>
+                        {l}
+                      </button>
+                    ))}
                     {canReject && <button type="button" className="pill" onClick={() => reject(t)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,100,100,0.3)', fontSize: 11, padding: '2px 8px', marginRight: 6 }}>✕ Reject</button>}
                     {canReassign && <button type="button" className="pill" onClick={() => setReassignTaskTarget(t)} style={{ fontSize: 11, padding: '2px 8px' }}>⇄ Reassign</button>}
                   </span>
