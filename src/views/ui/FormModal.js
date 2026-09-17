@@ -104,7 +104,7 @@ export function FormModal() {
                     ) : f.type === 'file' ? (
                       <input id={'m-' + f.name} type="file" accept={f.accept} onChange={e => set(f.name, e.target.files && e.target.files[0] ? e.target.files[0] : '')} />
                     ) : (
-                      <input id={'m-' + f.name} type={f.type || 'text'} value={values[f.name] ?? ''} placeholder={f.placeholder} min={f.min} max={f.max} step={f.step} autoComplete="off" onChange={e => set(f.name, e.target.value)} />
+                      <input id={'m-' + f.name} type={f.type || 'text'} value={values[f.name] ?? ''} placeholder={f.placeholder} min={f.min} max={f.max} step={f.step} autoComplete="off" onChange={e => set(f.name, e.target.value)} disabled={!!f.disabled} readOnly={!!f.readOnly} />
                     )}
                   </div>
                   {f.help && !errors[f.name] && <div className="help">{typeof f.help === 'function' ? f.help(values) : f.help}</div>}

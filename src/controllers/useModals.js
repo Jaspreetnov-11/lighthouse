@@ -23,10 +23,12 @@ export function useModals() {
       const projOpts = (t ? projects : assignableProjects).map(p => ({ v: p.id, l: p.name }));
       if (!t && !projOpts.length) { toast(isAdmin ? 'Create a project first, then assign tasks in it.' : 'Only the team leader of a project can assign tasks.'); return; }
       const people = d => employees.filter(e => !d.dept || e.dept === d.dept).map(e => ({ v: e.id, l: e.name, sub: e.role || '', av: e.av || avFor(e.name), ini: e.ini || ini(e.name) }));
+      const assignerName = t ? (t.assigned_by_name || (t.assigned_by ? (employees.find(e => e.id === t.assigned_by)?.name || t.assigned_by) : '')) : (me?.name || '');
       openModal({
-        title: t ? 'Edit task' : 'Assign task', sub: 'Pick the project and department first, then the people. The timer starts when they accept.', ok: t ? 'Save changes' : 'Assign task',
+        title: t ? 'Edit task' : 'Assign task', sub: t ? ('Assigned by ' + (assignerName || '—') + (t.assigned ? ' · ' + t.assigned : '')) : ('Assigning as ' + (me?.name || 'team leader') + ' · Pick project, department, and assignees.'), ok: t ? 'Save changes' : 'Assign task',
         fields: [
           { name: 'title', label: 'Task title', required: true, span: true, value: t ? t.title : '', placeholder: 'What needs to be done?' },
+          { name: 'assigned_by_display', label: 'Assign by', type: 'text', value: assignerName, disabled: true, readOnly: true, help: t ? 'Task assigner' : 'Task will be registered as assigned by you' },
           { name: 'project', label: 'Project', type: 'select', required: true, placeholder: 'Select project', options: projOpts, value: t ? t.project : (preset.project || '') },
           { name: 'dept', label: 'Department', type: 'select', required: true, placeholder: 'Select department', options: deptOpts, value: t ? (t.dept || '') : (preset.dept || ''), onChange: (v, all) => ({ assignees: (all.assignees || []).filter(x => { const e = employees.find(y => y.id === x); return e && e.dept === v; }) }) },
           { name: 'assignees', label: 'Assign to (one or more)', type: 'multiselect', required: true, span: true, error: 'Assign the task to at least one person.', optionsFor: people, lockedHint: v => (!v.project ? 'Select a project first' : !v.dept ? 'Select a department to see its people' : ''), value: t ? String(t.assignee || '').split(',').map(s => s.trim()).filter(Boolean) : (preset.assignee ? [preset.assignee] : []) },

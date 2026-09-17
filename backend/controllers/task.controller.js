@@ -101,7 +101,7 @@ const createTask = catchAsync(async (req, res) => {
   const task = await taskModel.create({ ...base, ...statusPatch(base, status) });
 
   const projName = projectRow ? projectRow.name : ((await projectModel.findById(project)) || {}).name || 'project';
-  await notifyAssignees(ids, task, `New task assigned to you: "${title}" (${projName}) · due ${deadline}`);
+  await notifyAssignees(ids, task, `New task assigned to you by ${req.user.name}: "${title}" (${projName}) · due ${deadline}`);
   await activityModel.log(`${req.user.name} assigned "${title}" (${projName})`);
   return apiResponse.created(res, task, 'Task created successfully');
 });

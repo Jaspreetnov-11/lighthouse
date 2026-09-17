@@ -116,7 +116,7 @@ export function TasksScreen() {
       toast(err.message || 'Failed to reject task.');
     }
   };
-  const exportCsv = () => saveCsv('tasks.csv', [['Title', 'Project', 'Department', 'Assignee', 'Assigned', 'Deadline', 'Est. hours', 'Taken hours', 'Status']].concat(tasks.map(t => [t.title, t.project_name || d.projName(t.project), t.dept || '', d.taskAssigneeNames(t), t.assigned, t.deadline, Math.round((Number(t.mins) || 0) / 6) / 10, Math.round(takenMins(t, now) / 6) / 10, STATUS_LABEL[t.status]])));
+  const exportCsv = () => saveCsv('tasks.csv', [['Title', 'Project', 'Department', 'Assignee', 'Assigned by', 'Assigned', 'Deadline', 'Est. hours', 'Taken hours', 'Status']].concat(tasks.map(t => [t.title, t.project_name || d.projName(t.project), t.dept || '', d.taskAssigneeNames(t), t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : ''), t.assigned, t.deadline, Math.round((Number(t.mins) || 0) / 6) / 10, Math.round(takenMins(t, now) / 6) / 10, STATUS_LABEL[t.status]])));
 
   const tabs = [['me', 'file', 'My tasks'], ['byme', 'check', 'Assigned by me'], ...(d.canAssign ? [['lead', 'brief', 'My projects']] : []), ['team', 'users', 'My department'], ['org', 'circle-check', 'Everyone']];
 
@@ -124,13 +124,20 @@ export function TasksScreen() {
     const od = overdue(t);
     const { acts, lead, mine, canReject } = actionsFor(t);
     const canReassign = (mine || lead) && t.status !== 'completed';
+    const assignerName = t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : '');
     return (
       <div className={'tcard' + (dragId === t.id ? ' dragging' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id} draggable={lead} onDragStart={ev => { if (!lead) { ev.preventDefault(); return; } setDragId(t.id); ev.dataTransfer.effectAllowed = 'move'; try { ev.dataTransfer.setData('text/plain', t.id); } catch (x) { /* ignore */ } }} onDragEnd={() => { setDragId(null); setOverCol(''); }}>
         <div className="p"><span>{t.project_name || d.projName(t.project)}</span><span style={{ display: 'flex', gap: 4, alignItems: 'center' }}><i className={od ? 'r' : ''} title={od ? 'Overdue' : ''}><Icon name="flag" size={14} /></i>{canReassign && <button type="button" onClick={() => setReassignTaskTarget(t)} title="Reassign task" style={{ background: 'none', border: 0, color: 'var(--muted)', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }}>⇄</button>}{lead && <><button onClick={() => modals.open('task', t.id)} aria-label="Edit"><Icon name="edit" /></button><button onClick={() => del(t)} aria-label="Delete">✕</button></>}</span></div>
         <small>{t.type || 'Other'}{t.dept ? ' · ' + t.dept : ''}</small>
         <div role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => setSheet(t.id)} title="Open task">{t.title}</div>
+        {assignerName && (
+          <div style={{ fontSize: 11.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+            <span style={{ opacity: 0.8 }}>Assign by:</span>
+            <b style={{ color: 'var(--text)', fontWeight: 600 }}>{assignerName}</b>
+          </div>
+        )}
         {t.reassigned_by && (
-          <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span>⇄ Reassigned by <b>{d.empName(t.reassigned_by)}</b></span>
             {t.reassign_note && <span title={t.reassign_note} style={{ color: 'var(--muted)', cursor: 'help' }}>💬</span>}
           </div>
@@ -179,10 +186,19 @@ export function TasksScreen() {
         </div>
         {rangeBar}
         <div className="mtask-list">
-          {mList.map(t => { const od = overdue(t); const { acts, lead } = actionsFor(t); return (
+          {mList.map(t => { const od = overdue(t); const { acts, lead } = actionsFor(t);
+            const assignerName = t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : '');
+            return (
             <div className={'mtask' + (t.status === 'completed' ? ' done' : od ? ' late' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id}>
               <div className="mtask-top"><span className="mtask-proj">{t.project_name || d.projName(t.project)}</span><span className={'chip ' + (od ? 'pk' : t.status === 'completed' ? 'gr' : 'gy')}>{t.status === 'completed' ? 'Done ' + fmtD(t.completed || t.deadline) : 'Due ' + fmtD(t.deadline)}</span></div>
               <div className="mtask-title" role="button" onClick={() => setSheet(t.id)}>{t.title}</div>
+              {assignerName && (
+                <div style={{ fontSize: 11.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4, margin: '2px 0 4px' }}>
+                  <span style={{ opacity: 0.8 }}>Assign by:</span>
+                  <b style={{ color: 'var(--text)', fontWeight: 600 }}>{assignerName}</b>
+                  {t.reassigned_by && <span style={{ color: 'var(--accent)', marginLeft: 4 }}>(⇄ Reassigned by {d.empName(t.reassigned_by)})</span>}
+                </div>
+              )}
               <div className="mtask-row"><Assignees task={t} /><TaskChip status={t.status} /></div>
               <div className="tcard" style={{ padding: 0, border: 0, background: 'none' }}><Timer t={t} now={now} /></div>
               <div className="mtask-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
@@ -234,11 +250,15 @@ export function TasksScreen() {
             {listPager.items.map(t => {
               const { lead, mine, canReject } = actionsFor(t);
               const canReassign = (mine || lead) && t.status !== 'completed';
+              const assignerName = t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : '');
               return (
                 <div className="task-row" key={t.id}>
                   <LinkBtn onClick={() => (d.isLeaderOf(t.project) ? modals.open('task', t.id) : null)} style={{ textAlign: 'left' }}>{t.title}</LinkBtn>
                   <span>{t.project_name || d.projName(t.project)}</span>
-                  <span>{d.taskAssigneeNames(t)}</span>
+                  <span>
+                    <div>{d.taskAssigneeNames(t)}</div>
+                    {assignerName && <small style={{ display: 'block', color: 'var(--muted)', fontSize: 11 }}>Assign by: <b style={{ color: 'var(--text)', fontWeight: 500 }}>{assignerName}</b></small>}
+                  </span>
                   <span>{fmtD(t.assigned)}</span>
                   <span style={{ color: overdue(t) ? 'var(--danger)' : undefined }}>{fmtD(t.deadline)}</span>
                   <span>{hm(t.mins)} / {hm(takenMins(t, now))}</span>

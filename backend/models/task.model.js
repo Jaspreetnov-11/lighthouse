@@ -21,10 +21,14 @@ class TaskModel extends BaseModel {
              e.name as assignee_name,
              e.role as assignee_role,
              e.av as assignee_av,
-             e.ini as assignee_ini
+             e.ini as assignee_ini,
+             ab.name as assigned_by_name,
+             ab.role as assigned_by_role,
+             ab.av as assigned_by_av
       FROM lh_tasks t
       LEFT JOIN lh_projects p ON t.project = p.id
       LEFT JOIN lh_employees e ON t.assignee = e.id
+      LEFT JOIN lh_employees ab ON t.assigned_by = ab.id
       WHERE 1=1
     `;
     const params = [];
@@ -48,6 +52,26 @@ class TaskModel extends BaseModel {
     if (assignee) sql += ' WHERE ' + assigneeClause('assignee', assignee, params);
     sql += ' GROUP BY status';
     return db.all(sql, params);
+  }
+
+  async findById(id) {
+    const sql = `
+      SELECT t.*,
+             p.name as project_name,
+             e.name as assignee_name,
+             e.role as assignee_role,
+             e.av as assignee_av,
+             e.ini as assignee_ini,
+             ab.name as assigned_by_name,
+             ab.role as assigned_by_role,
+             ab.av as assigned_by_av
+      FROM lh_tasks t
+      LEFT JOIN lh_projects p ON t.project = p.id
+      LEFT JOIN lh_employees e ON t.assignee = e.id
+      LEFT JOIN lh_employees ab ON t.assigned_by = ab.id
+      WHERE t.id = ?
+    `;
+    return db.get(sql, [id]);
   }
 
   /** Remove an employee from every task's assignee list. */

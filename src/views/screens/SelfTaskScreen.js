@@ -364,6 +364,11 @@ export function SelfTaskScreen() {
                         <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
                           {t.title}
                         </div>
+                        <div style={{ fontSize: 11.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                          <span style={{ opacity: 0.8 }}>Assign by:</span>
+                          <b style={{ color: 'var(--text)', fontWeight: 600 }}>{t.assigned_by === me?.id ? 'Self (' + (me?.name || 'You') + ')' : (t.assigned_by_name || d.empName(t.assigned_by))}</b>
+                          {t.reassigned_by && <span style={{ color: 'var(--accent)', marginLeft: 4 }}>(⇄ Reassigned by {d.empName(t.reassigned_by)})</span>}
+                        </div>
                       </div>
 
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
