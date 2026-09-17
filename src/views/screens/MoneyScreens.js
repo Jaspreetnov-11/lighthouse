@@ -11,7 +11,7 @@ import { Pager, usePager } from '@/views/ui/Pager';
 import { fmtD, inr, monthLabel, PAY_TYPES, round2, shiftMonth, thisMonth } from '@/lib/format';
 
 function MonthNav({ month, setMonth }) {
-  return (<><Sq onClick={() => setMonth(shiftMonth(month, -1))} style={{ height: 34, width: 34 }}>‹</Sq><span className="date-btn"><Icon name="cal" />{monthLabel(month)}</span><Sq onClick={() => { if (month < thisMonth()) setMonth(shiftMonth(month, 1)); }} style={{ height: 34, width: 34, opacity: month >= thisMonth() ? 0.4 : 1 }}>›</Sq></>);
+  return (<><Sq onClick={() => setMonth(shiftMonth(month, -1))}>‹</Sq><span className="date-btn"><Icon name="cal" />{monthLabel(month)}</span><Sq onClick={() => { if (month < thisMonth()) setMonth(shiftMonth(month, 1)); }} style={{ opacity: month >= thisMonth() ? 0.4 : 1 }}>›</Sq></>);
 }
 
 export function PaymentsScreen() {

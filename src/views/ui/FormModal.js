@@ -68,7 +68,11 @@ export function FormModal() {
   return (
     <div className="scrim open" onClick={e => { if (e.target === e.currentTarget) closeModal(); }} role="presentation">
       <div className="dialog wide" role="dialog" aria-modal="true">
-        <h2>{modal.title}</h2>
+        <div className="dialog-handle" onClick={closeModal} title="Minimise sheet" role="button" tabIndex={0} />
+        <div className="dialog-h">
+          <h2>{modal.title}</h2>
+          <button type="button" className="dialog-close" onClick={closeModal} aria-label="Close modal" title="Close">✕</button>
+        </div>
         {modal.sub && <p>{modal.sub}</p>}
         <form onSubmit={submit} noValidate>
           {modal.custom ? modal.custom : (
@@ -140,22 +144,26 @@ export function ConfirmModal() {
   return (
     <div className="scrim open" onClick={e => { if (e.target === e.currentTarget) closeConfirm(false); }} role="presentation">
       <div className="dialog" role="dialog" aria-modal="true" style={{ maxWidth: 460, padding: '24px 26px 22px', textAlign: 'left' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <div style={{
-            width: 38,
-            height: 38,
-            borderRadius: 10,
-            background: confirmDialog.danger ? 'rgba(255, 92, 122, 0.15)' : 'rgba(111, 168, 255, 0.15)',
-            border: `1px solid ${confirmDialog.danger ? 'rgba(255, 92, 122, 0.3)' : 'rgba(111, 168, 255, 0.3)'}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 18,
-            flexShrink: 0
-          }}>
-            {confirmDialog.danger ? '⚠️' : 'ℹ️'}
+        <div className="dialog-handle" onClick={() => closeConfirm(false)} title="Minimise sheet" role="button" tabIndex={0} />
+        <div className="dialog-h">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              background: confirmDialog.danger ? 'rgba(255, 92, 122, 0.15)' : 'rgba(111, 168, 255, 0.15)',
+              border: `1px solid ${confirmDialog.danger ? 'rgba(255, 92, 122, 0.3)' : 'rgba(111, 168, 255, 0.3)'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 18,
+              flexShrink: 0
+            }}>
+              {confirmDialog.danger ? '⚠️' : 'ℹ️'}
+            </div>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{confirmDialog.title}</h2>
           </div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{confirmDialog.title}</h2>
+          <button type="button" className="dialog-close" onClick={() => closeConfirm(false)} aria-label="Close dialog" title="Close">✕</button>
         </div>
 
         <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--text-soft)', lineHeight: 1.55 }}>

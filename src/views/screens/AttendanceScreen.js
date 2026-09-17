@@ -175,13 +175,13 @@ export function AttendanceScreen() {
   return (
     <>
       <div className="page-head">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Link href="/dashboard" className="back" aria-label="Back">‹</Link><div><h1>Attendance Summary</h1><p>Mark and review attendance by day</p></div></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Link href="/dashboard" className="back" aria-label="Back">‹</Link><div><h1>Attendance Summary</h1><p>Mark and review attendance by day</p></div></div>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}><LinkBtn onClick={exportDay}>Daily Report ⤓</LinkBtn><LinkBtn onClick={exportRegister}>Month register ⤓</LinkBtn><LinkBtn href="/payroll">Payroll →</LinkBtn></div>
       </div>
       <div className="content">
         <div className="panel">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><Sq onClick={() => shift(-1)} style={{ height: 34, width: 34 }}>‹</Sq><input type="date" value={date} max={todayISO()} onChange={e => { if (e.target.value && e.target.value <= todayISO()) setDate(e.target.value); }} style={{ height: 34, width: 160, fontSize: 12.5, borderRadius: 100 }} /><Sq onClick={() => shift(1)} style={{ height: 34, width: 34, opacity: isToday ? 0.4 : 1 }}>›</Sq>{!isToday && <LinkBtn onClick={() => setDate(todayISO())}>Today</LinkBtn>}</div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><Sq onClick={() => shift(-1)}>‹</Sq><input type="date" value={date} max={todayISO()} onChange={e => { if (e.target.value && e.target.value <= todayISO()) setDate(e.target.value); }} style={{ height: 38, width: 160, fontSize: 13, borderRadius: 100 }} /><Sq onClick={() => shift(1)} style={{ opacity: isToday ? 0.4 : 1 }}>›</Sq>{!isToday && <LinkBtn onClick={() => setDate(todayISO())}>Today</LinkBtn>}</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <Seg items={[['all', 'All staff'], ['me', 'Me']]} value={tab} onChange={setTab} />
               <Chip

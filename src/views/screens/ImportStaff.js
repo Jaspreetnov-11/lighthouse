@@ -63,7 +63,11 @@ export function ImportStaff({ onClose }) {
   return (
     <div className="scrim open" onClick={e => { if (e.target === e.currentTarget && !busy) onClose(); }} role="presentation">
       <div className="dialog wide" role="dialog" aria-modal="true" style={{ maxWidth: 820 }}>
-        <h2>Import staff from Excel</h2>
+        <div className="dialog-handle" onClick={onClose} title="Minimise sheet" role="button" tabIndex={0} />
+        <div className="dialog-h">
+          <h2 style={{ margin: 0 }}>Import staff from Excel</h2>
+          <button type="button" className="dialog-close" onClick={onClose} disabled={busy} aria-label="Close modal" title="Close">✕</button>
+        </div>
         <p>Use the template (Staff sheet, row 1 = column names). Logins are created for new emails; existing Limelight logins are linked. Departments that do not exist are created.</p>
         {phase === 'pick' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

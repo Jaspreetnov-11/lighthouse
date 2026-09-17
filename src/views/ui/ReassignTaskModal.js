@@ -88,22 +88,16 @@ export function ReassignTaskModal({ isOpen, task, employees = [], currentUserId,
           padding: '24px 26px 20px'
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <div className="dialog-handle" onClick={onClose} title="Minimise sheet" role="button" tabIndex={0} />
+        <div className="dialog-h">
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Reassign Task</h2>
           <button
             type="button"
+            className="dialog-close"
             onClick={onClose}
             disabled={busy}
             aria-label="Close"
-            style={{
-              background: 'transparent',
-              border: 0,
-              color: 'var(--muted)',
-              fontSize: 18,
-              cursor: 'pointer',
-              padding: '4px 8px',
-              borderRadius: 8
-            }}
+            title="Close"
           >
             ✕
           </button>
@@ -256,13 +250,12 @@ export function ReassignTaskModal({ isOpen, task, employees = [], currentUserId,
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
             <button
               type="button"
               className="btn btn-ghost"
               onClick={onClose}
               disabled={busy}
-              style={{ height: 38, padding: '0 18px', fontSize: 13 }}
             >
               Cancel
             </button>
@@ -270,7 +263,7 @@ export function ReassignTaskModal({ isOpen, task, employees = [], currentUserId,
               type="submit"
               className={'tb-btn solid' + (busy ? ' loading' : '')}
               disabled={busy || !selected.length}
-              style={{ height: 38, padding: '0 20px', fontSize: 13, fontWeight: 600 }}
+              style={{ minHeight: 42, padding: '0 20px', fontSize: 13.5, fontWeight: 600 }}
             >
               Reassign Task
             </button>

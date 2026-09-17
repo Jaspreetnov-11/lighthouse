@@ -153,7 +153,8 @@ export function TasksScreen() {
   const taskSheet = sheetTask ? (
     <div className="tsheet-bg" onClick={e => { if (e.target === e.currentTarget) setSheet(''); }}>
       <div className="tsheet" role="dialog" aria-label="Task">
-        <div className="tsheet-h"><b>Task</b><span style={{ display: 'inline-flex', gap: 6 }}>{actionsFor(sheetTask).lead && <button className="mini-btn" onClick={() => { setSheet(''); modals.open('task', sheetTask.id); }} title="Edit"><Icon name="edit" /></button>}<button className="mini-btn" onClick={() => setSheet('')} aria-label="Close">✕</button></span></div>
+        <div className="dialog-handle" onClick={() => setSheet('')} title="Minimise sheet" role="button" tabIndex={0} />
+        <div className="tsheet-h"><b>Task</b><span style={{ display: 'inline-flex', gap: 6 }}>{actionsFor(sheetTask).lead && <button className="mini-btn" onClick={() => { setSheet(''); modals.open('task', sheetTask.id); }} title="Edit"><Icon name="edit" /></button>}<button className="mini-btn" onClick={() => setSheet('')} aria-label="Close" title="Close">✕</button></span></div>
         {card(sheetTask)}
       </div>
     </div>

@@ -474,14 +474,17 @@ export function StaffSalaryStructure({ employee, onUpdated, onCancel }) {
       {modalType && (
         <div className="scrim open" onClick={(e) => { if (e.target === e.currentTarget) setModalType(null); }} role="presentation">
           <div className="dialog wide" role="dialog" aria-modal="true" style={{ maxWidth: 520 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div className="dialog-handle" onClick={() => setModalType(null)} title="Minimise sheet" role="button" tabIndex={0} />
+            <div className="dialog-h">
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>
                 {modalType === 'earnings' ? 'Earnings Default List' : 'Deductions Default List'}
               </h2>
               <button
                 type="button"
+                className="dialog-close"
                 onClick={() => setModalType(null)}
-                style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 4 }}
+                aria-label="Close"
+                title="Close"
               >
                 ✕
               </button>
@@ -673,12 +676,11 @@ export function StaffSalaryStructure({ employee, onUpdated, onCancel }) {
             )}
 
             {/* Modal actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
               <button
                 type="button"
-                className="tb-btn"
+                className="btn btn-ghost"
                 onClick={() => setModalType(null)}
-                style={{ height: 36, padding: '0 16px', fontSize: 13 }}
               >
                 Cancel
               </button>
@@ -687,7 +689,7 @@ export function StaffSalaryStructure({ employee, onUpdated, onCancel }) {
                 className="tb-btn solid"
                 onClick={applySuggestions}
                 disabled={selectedSuggestions.length === 0}
-                style={{ height: 36, padding: '0 18px', fontSize: 13 }}
+                style={{ minHeight: 42, padding: '0 18px', fontSize: 13.5, fontWeight: 600 }}
               >
                 Apply ({selectedSuggestions.length})
               </button>

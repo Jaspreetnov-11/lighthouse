@@ -42,10 +42,10 @@ export function ClientsScreen() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <SectionTitle>Clients</SectionTitle>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Sq onClick={() => setMonth(shiftMonth(month, -1))} style={{ height: 34, width: 34 }}>‹</Sq>
+          <Sq onClick={() => setMonth(shiftMonth(month, -1))}>‹</Sq>
           <span className="date-btn" style={{ cursor: 'default' }}>{monthLabel(month)}</span>
-          <Sq onClick={() => !isCur && setMonth(shiftMonth(month, 1))} style={{ height: 34, width: 34, opacity: isCur ? 0.4 : 1 }}>›</Sq>
-          <button className="tb-btn solid" style={{ height: 34 }} onClick={() => modals.open('client')}>+ Add client</button>
+          <Sq onClick={() => !isCur && setMonth(shiftMonth(month, 1))} style={{ opacity: isCur ? 0.4 : 1 }}>›</Sq>
+          <button className="tb-btn solid" style={{ height: 36 }} onClick={() => modals.open('client')}>+ Add client</button>
         </div>
       </div>
 

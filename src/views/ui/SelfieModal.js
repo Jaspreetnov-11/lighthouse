@@ -77,7 +77,12 @@ export function SelfieModal() {
   return (
     <div className="scrim open" role="presentation" style={{ zIndex: 60 }}>
       <div className="dialog" role="dialog" aria-modal="true" style={{ maxWidth: 420, textAlign: 'center' }}>
-        <h2>{selfieRequest.title || 'Clock in'}</h2>
+        <div className="dialog-handle" onClick={cancel} title="Minimise sheet" role="button" tabIndex={0} />
+        <div className="dialog-h">
+          <div style={{ width: 36 }} />
+          <h2 style={{ margin: 0 }}>{selfieRequest.title || 'Clock in'}</h2>
+          <button type="button" className="dialog-close" onClick={cancel} aria-label="Close modal" title="Close">✕</button>
+        </div>
         <p>{selfieRequest.sub || 'Your photo and location are saved with this punch.'}</p>
         {askMode && (
           <div className="mode-pick">

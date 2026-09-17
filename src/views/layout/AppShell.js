@@ -120,7 +120,8 @@ export function AppShell({ children }) {
         </nav>
         <div className="bsheet" hidden={!sheet} onClick={e => { if (e.target === e.currentTarget) setSheet(false); }}>
           <div className="bsheet-in">
-            <div className="bsheet-h">Menu <button className="mini-btn" onClick={() => setSheet(false)} aria-label="Close">✕</button></div>
+            <div className="dialog-handle" onClick={() => setSheet(false)} title="Minimise menu" role="button" tabIndex={0} />
+            <div className="bsheet-h"><span>Menu</span> <button className="mini-btn" onClick={() => setSheet(false)} aria-label="Close" title="Close">✕</button></div>
             <div className="bsheet-grid">
               {nav.filter(([k]) => !['dashboard', 'attendance', 'notifications', 'tasks'].includes(k)).map(([key, label, icon]) => (
                 <Link key={key} href={'/' + key} className={current === key ? 'active' : ''} style={{ textDecoration: 'none' }}><Icon name={icon} />{label}</Link>
