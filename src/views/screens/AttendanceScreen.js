@@ -9,7 +9,7 @@ import { AttendanceModel, ReportModel } from '@/models';
 import { saveBlob, saveCsv } from '@/lib/download';
 import { Avatar, Chip, DeductLeaveModal, Empty, GeoLink, LinkBtn, Search, Seg, Sq } from '@/views/ui';
 import { Pager, usePager } from '@/views/ui/Pager';
-import { ATT, attStatus, fmtD, fmtDY, isoLocal, todayISO, weekOffOf } from '@/lib/format';
+import { ATT, attStatus, fmtD, fmtDY, isoLocal, round2, todayISO, weekOffOf } from '@/lib/format';
 
 const hrs = n => { const m = Math.round((Number(n) || 0) * 60); return Math.floor(m / 60) + 'h ' + (m % 60) + 'm'; };
 
@@ -130,16 +130,16 @@ export function AttendanceScreen() {
   };
   const hoursPrompt = (e, kind) => {
     const a = rec[e.id] || {};
-    const v = window.prompt((kind === 'ot_hours' ? 'Overtime' : 'Fine') + ' hours for ' + e.name + ' on ' + fmtD(date) + ':', a[kind] || 1);
+    const v = window.prompt((kind === 'ot_hours' ? 'Overtime' : 'Fine') + ' hours for ' + e.name + ' on ' + fmtD(date) + ':', round2(a[kind] || 1));
     if (v === null) return;
-    send({ emp: e.id, status: attStatus(a) || 'present', [kind]: Math.max(0, parseFloat(v) || 0) });
+    send({ emp: e.id, status: attStatus(a) || 'present', [kind]: round2(Math.max(0, parseFloat(v) || 0)) });
   };
   const notePrompt = e => {
     const a = rec[e.id] || {};
     const v = window.prompt('Note for ' + e.name + ':', a.note || ''); if (v === null) return;
     send({ emp: e.id, status: attStatus(a), note: v.trim() });
   };
-  const exportDay = () => saveCsv('attendance-' + date + '.csv', [['Employee', 'Emp ID', 'Date', 'Status', 'Clock In', 'Clock Out', 'Sessions', 'OT hours', 'Fine hours', 'Note', 'In location', 'Out location']].concat(d.employees.map(e => { const a = rec[e.id] || {}; const sCount = (a.sessions && a.sessions.length ? a.sessions.length + (a.clock_in ? 1 : 0) : (a.clock_in ? 1 : 0)); return [e.name, e.emp_id || '', date, attStatus(a) || 'not marked', a.clock_in || '', a.clock_out || '', sCount || 0, a.ot_hours || 0, a.fine_hours || 0, a.note || '', a.in_addr || (a.in_lat ? a.in_lat + ',' + a.in_lng : ''), a.out_addr || (a.out_lat ? a.out_lat + ',' + a.out_lng : '')]; })));
+  const exportDay = () => saveCsv('attendance-' + date + '.csv', [['Employee', 'Emp ID', 'Date', 'Status', 'Clock In', 'Clock Out', 'Sessions', 'OT hours', 'Fine hours', 'Note', 'In location', 'Out location']].concat(d.employees.map(e => { const a = rec[e.id] || {}; const sCount = (a.sessions && a.sessions.length ? a.sessions.length + (a.clock_in ? 1 : 0) : (a.clock_in ? 1 : 0)); return [e.name, e.emp_id || '', date, attStatus(a) || 'not marked', a.clock_in || '', a.clock_out || '', sCount || 0, round2(a.ot_hours || 0), round2(a.fine_hours || 0), a.note || '', a.in_addr || (a.in_lat ? a.in_lat + ',' + a.in_lng : ''), a.out_addr || (a.out_lat ? a.out_lat + ',' + a.out_lng : '')]; })));
   const viewSelfie = async (id, which) => {
     if (!isAdmin) return;
     try { const blob = await AttendanceModel.selfie(id, which); const url = URL.createObjectURL(blob); window.open(url, '_blank', 'noopener'); setTimeout(() => URL.revokeObjectURL(url), 60000); }
@@ -161,8 +161,8 @@ export function AttendanceScreen() {
           {sess.length > 0 && a.clock_out ? <Chip tone="pu" style={{ marginLeft: 6 }} title={sessTooltip}>{sess.length + 1} sessions</Chip> : null}
           {a.mode && a.mode !== 'office' ? <Chip tone={a.mode === 'wfh' ? 'gr' : 'bl'} style={{ marginLeft: 6 }}>{a.mode === 'wfh' ? 'WFH' : 'Field'}</Chip> : null}
           {Number(a.late) && !(sess.length > 0) ? <Chip tone="or" style={{ marginLeft: 6 }}>Late</Chip> : null}
-          {Number(a.ot_hours) ? ' · OT ' + a.ot_hours + 'h' : ''}
-          {Number(a.fine_hours) ? ' · Fine ' + a.fine_hours + 'h' : ''}
+          {Number(a.ot_hours) ? ' · OT ' + round2(a.ot_hours) + 'h' : ''}
+          {Number(a.fine_hours) ? ' · Fine ' + round2(a.fine_hours) + 'h' : ''}
         </span>
       );
     }
@@ -238,8 +238,8 @@ export function AttendanceScreen() {
                         </button>
                       );
                     })}
-                    <button className={a && Number(a.fine_hours) ? 'on pk' : ''} onClick={() => hoursPrompt(e, 'fine_hours')}><b>F</b>Fine{a && Number(a.fine_hours) ? ' ' + a.fine_hours + 'h' : ''}</button>
-                    <button className={a && Number(a.ot_hours) ? 'on gr' : ''} onClick={() => hoursPrompt(e, 'ot_hours')}><b>OT</b>Overtime{a && Number(a.ot_hours) ? ' ' + a.ot_hours + 'h' : ''}</button>
+                    <button className={a && Number(a.fine_hours) ? 'on pk' : ''} onClick={() => hoursPrompt(e, 'fine_hours')}><b>F</b>Fine{a && Number(a.fine_hours) ? ' ' + round2(a.fine_hours) + 'h' : ''}</button>
+                    <button className={a && Number(a.ot_hours) ? 'on gr' : ''} onClick={() => hoursPrompt(e, 'ot_hours')}><b>OT</b>Overtime{a && Number(a.ot_hours) ? ' ' + round2(a.ot_hours) + 'h' : ''}</button>
                   </div>
                 </div>
               ); })}

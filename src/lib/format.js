@@ -27,6 +27,8 @@ export const shiftMonth = (m, n) => { const [y, mo] = m.split('-').map(Number); 
 export const hm = mins => { mins = Math.round(mins || 0); return String(Math.floor(mins / 60)).padStart(2, '0') + 'h ' + String(mins % 60).padStart(2, '0') + 'm'; };
 /** Hours + minutes, e.g. "8h 20m" (no leading zero on hours). */
 export const hrs1 = mins => { const m = Math.max(0, Math.round(Number(mins) || 0)); return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; };
+/** Rounds a number to at most 2 decimal places (eliminating floating-point artifacts like 3.030000000000002 -> 3.03). */
+export const round2 = n => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
 const toMins = s => { if (!s || !s.includes(':')) return null; const [h, m] = s.split(':').map(Number); return h * 60 + m; };
 /** Minutes of a punch: finished (handles clock-out after midnight, sessions/rechecking) or live until now. */
 /** Breaks recorded on a punch: [{ start, end?, mins? }] */

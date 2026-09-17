@@ -185,7 +185,7 @@ export function useModals() {
         ],
         onSubmit: async d => {
           if (!a) throw new Error('Use the P / HD / A / L buttons to create a record first.');
-          await AttendanceModel.update(a.id, { status: d.status, mode: d.mode, clock_in: d.clock_in, clock_out: d.clock_out, ot_hours: Number(d.ot_hours) || 0, fine_hours: Number(d.fine_hours) || 0, note: d.note });
+          await AttendanceModel.update(a.id, { status: d.status, mode: d.mode, clock_in: d.clock_in, clock_out: d.clock_out, ot_hours: Math.round(((Number(d.ot_hours) || 0) + Number.EPSILON) * 100) / 100, fine_hours: Math.round(((Number(d.fine_hours) || 0) + Number.EPSILON) * 100) / 100, note: d.note });
           toast('Attendance saved.');
           await reload('today', 'employees');
           if (preset.after) preset.after();

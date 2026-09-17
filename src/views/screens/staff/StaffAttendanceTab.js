@@ -5,7 +5,7 @@ import { AttendanceModel } from '@/models';
 import { useUi } from '@/controllers/UiController';
 import { Chip, Empty } from '@/views/ui';
 import { Icon } from '@/views/ui/Icons';
-import { fmtD, thisMonth } from '@/lib/format';
+import { fmtD, round2, thisMonth } from '@/lib/format';
 
 export function StaffAttendanceTab({ employee }) {
   const { toast } = useUi();
@@ -152,8 +152,8 @@ export function StaffAttendanceTab({ employee }) {
                         </span>
                       </td>
                       <td>
-                        {r.ot_hours > 0 && <span style={{ color: 'var(--ok, #4ADE95)' }}>+{r.ot_hours}h OT </span>}
-                        {r.fine_hours > 0 && <span style={{ color: 'var(--danger, #FF5C7A)' }}>-{r.fine_hours}h Fine</span>}
+                        {r.ot_hours > 0 && <span style={{ color: 'var(--ok, #4ADE95)' }}>+{round2(r.ot_hours)}h OT </span>}
+                        {r.fine_hours > 0 && <span style={{ color: 'var(--danger, #FF5C7A)' }}>-{round2(r.fine_hours)}h Fine</span>}
                         {!r.ot_hours && !r.fine_hours && <span style={{ color: 'var(--dim)' }}>—</span>}
                       </td>
                       <td style={{ color: 'var(--muted)', fontSize: 12.5 }}>

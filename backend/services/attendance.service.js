@@ -5,7 +5,7 @@ const employeeModel = require('../models/employee.model');
 const leaveModel = require('../models/leave.model');
 const activityModel = require('../models/activity.model');
 const AppError = require('../utils/appError');
-const { todayISO, thisMonth, nowHHMM, workdaysIn, isLate, otHoursFor, punchMinutes, shiftOf, hoursPerDay, toMins, weekOff, weekOffOf } = require('../utils/calculations');
+const { todayISO, thisMonth, nowHHMM, workdaysIn, isLate, otHoursFor, punchMinutes, shiftOf, hoursPerDay, toMins, weekOff, weekOffOf, round2 } = require('../utils/calculations');
 const holidayModel = require('../models/holiday.model');
 const yesterdayOf = iso => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 const MODES = ['office', 'wfh', 'field'];
@@ -102,8 +102,11 @@ function computeMonthStats(rows, leaves, month, opts = {}) {
   const unaccounted = Math.max(0, workdaysSoFar - present - half - absent - leaveDays);
   const avgWorkingMinutes = daysWithOut > 0 ? Math.round(totalWorkedMinutes / daysWithOut) : 0;
 
+  otHours = round2(otHours);
+  fineHours = round2(fineHours);
+
   // Per-day series for charts (date, minutes worked, status, late, mode)
-  const days = rows.map(r => ({ date: r.date, mins: r.clock_in && r.clock_out ? punchMinutes(r) : 0, open: Boolean(r.clock_in && !r.clock_out), status: r.status || (r.clock_in ? 'present' : ''), late: Number(r.late) ? 1 : 0, mode: r.mode || 'office', ot: Number(r.ot_hours) || 0, breakMins: Number(r.break_mins) || 0 })).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const days = rows.map(r => ({ date: r.date, mins: r.clock_in && r.clock_out ? punchMinutes(r) : 0, open: Boolean(r.clock_in && !r.clock_out), status: r.status || (r.clock_in ? 'present' : ''), late: Number(r.late) ? 1 : 0, mode: r.mode || 'office', ot: round2(r.ot_hours), breakMins: Number(r.break_mins) || 0 })).sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
   return {
     month, present, half, absent, late, leave: leaveDays, otHours, fineHours, days, breakMinutes, missedDays,
@@ -266,11 +269,11 @@ class AttendanceService {
     let ot = 0;
     if (settingsService.get().autoOvertime !== false) {
       const standardMins = hoursPerDay() * 60;
-      const otFromHours = workedMins > standardMins ? Math.round(((workedMins - standardMins) / 60) * 100) / 100 : 0;
+      const otFromHours = workedMins > standardMins ? round2((workedMins - standardMins) / 60) : 0;
       const otFromShift = otHoursFor(shift, timeStr, nextDay);
-      ot = Math.max(Number(existing.ot_hours) || 0, otFromHours, otFromShift);
+      ot = round2(Math.max(Number(existing.ot_hours) || 0, otFromHours, otFromShift));
     } else {
-      ot = Number(existing.ot_hours) || 0;
+      ot = round2(existing.ot_hours);
     }
 
     const record = await attendanceModel.update(existing.id, {
@@ -355,7 +358,7 @@ class AttendanceService {
       avgWorkingMinutes: withHours.length ? Math.round(withHours.reduce((a, s) => a + s.avgWorkingMinutes, 0) / withHours.length) : 0,
       totalWorkedMinutes: staff.reduce((a, s) => a + s.totalWorkedMinutes, 0),
       expectedMinutesSoFar: staff.reduce((a, s) => a + (s.expectedMinutesSoFar || 0), 0),
-      otHours: staff.reduce((a, s) => a + s.otHours, 0),
+      otHours: round2(staff.reduce((a, s) => a + (Number(s.otHours) || 0), 0)),
       lateCount: staff.reduce((a, s) => a + s.late, 0),
       staff
     };

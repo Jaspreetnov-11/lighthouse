@@ -9,7 +9,7 @@ import { useUi } from '@/controllers/UiController';
 import { useModals } from '@/controllers/useModals';
 import { ActivityModel, AttendanceModel, EmployeeModel, PerformanceModel, SettingsModel } from '@/models';
 import { Avatar, Chip, Empty, Pills, Sq } from '@/views/ui';
-import { ACCESS_LABEL, ATT, fmtD, inr, thisMonth, todayISO, WEEK_DAYS } from '@/lib/format';
+import { ACCESS_LABEL, ATT, fmtD, inr, round2, thisMonth, todayISO, WEEK_DAYS } from '@/lib/format';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const inp = { height: 36, fontSize: 12.5, borderRadius: 10, padding: '0 10px', width: '100%' };
@@ -142,7 +142,7 @@ function AttendanceFix() {
 
   const load = useCallback(async () => {
     if (!emp || !date) { setRec(null); return; }
-    try { const rows = await AttendanceModel.list({ date }); const r = rows.find(x => x.emp === emp) || null; setRec(r); setF({ status: r ? (r.status || (r.clock_in ? 'present' : '')) : 'present', mode: r ? r.mode || 'office' : 'office', clock_in: r ? r.clock_in || '' : '', clock_out: r ? r.clock_out || '' : '', ot_hours: r ? Number(r.ot_hours) || 0 : 0, fine_hours: r ? Number(r.fine_hours) || 0 : 0, note: r ? r.note || '' : '' }); }
+    try { const rows = await AttendanceModel.list({ date }); const r = rows.find(x => x.emp === emp) || null; setRec(r); setF({ status: r ? (r.status || (r.clock_in ? 'present' : '')) : 'present', mode: r ? r.mode || 'office' : 'office', clock_in: r ? r.clock_in || '' : '', clock_out: r ? r.clock_out || '' : '', ot_hours: r ? round2(r.ot_hours) : 0, fine_hours: r ? round2(r.fine_hours) : 0, note: r ? r.note || '' : '' }); }
     catch (err) { toast(err.message); }
   }, [emp, date, toast]);
   useEffect(() => { load(); }, [load]);
@@ -151,7 +151,7 @@ function AttendanceFix() {
     if (!emp) { toast('Pick a person first.'); return; }
     setBusy(true);
     try {
-      await AttendanceModel.mark(clear ? { emp, date, status: '', clock_in: '', clock_out: '', ot_hours: 0, fine_hours: 0, note: '' } : { emp, date, status: f.status, mode: f.mode, clock_in: f.clock_in, clock_out: f.clock_out, ot_hours: Number(f.ot_hours) || 0, fine_hours: Number(f.fine_hours) || 0, note: f.note });
+      await AttendanceModel.mark(clear ? { emp, date, status: '', clock_in: '', clock_out: '', ot_hours: 0, fine_hours: 0, note: '' } : { emp, date, status: f.status, mode: f.mode, clock_in: f.clock_in, clock_out: f.clock_out, ot_hours: round2(f.ot_hours), fine_hours: round2(f.fine_hours), note: f.note });
       toast(clear ? 'Day cleared.' : 'Attendance saved for ' + fmtD(date) + '.'); await load(); await d.reload('today', 'employees', 'myStats', 'teamSummary');
     } catch (err) { toast(err.message); } finally { setBusy(false); }
   };
@@ -166,7 +166,7 @@ function AttendanceFix() {
         </div>
         {emp && (
           <>
-            <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{rec ? <>Current: <b style={{ color: 'var(--text)' }}>{ATT[rec.status] ? ATT[rec.status][1] : rec.clock_in ? 'Present' : 'Not marked'}</b>{rec.clock_in ? ' · in ' + rec.clock_in : ''}{rec.clock_out ? ' · out ' + rec.clock_out : ''}{Number(rec.late) ? ' · late' : ''}{Number(rec.ot_hours) ? ' · OT ' + rec.ot_hours + 'h' : ''}</> : 'No record for this day yet.'}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{rec ? <>Current: <b style={{ color: 'var(--text)' }}>{ATT[rec.status] ? ATT[rec.status][1] : rec.clock_in ? 'Present' : 'Not marked'}</b>{rec.clock_in ? ' · in ' + rec.clock_in : ''}{rec.clock_out ? ' · out ' + rec.clock_out : ''}{Number(rec.late) ? ' · late' : ''}{Number(rec.ot_hours) ? ' · OT ' + round2(rec.ot_hours) + 'h' : ''}{Number(rec.fine_hours) ? ' · Fine ' + round2(rec.fine_hours) + 'h' : ''}</> : 'No record for this day yet.'}</div>
             <div className="grid2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 12 }}>
               <div className="field"><label>Status</label><div className="control"><select value={f.status} onChange={e => set('status', e.target.value)}>{Object.entries(ATT).map(([k, [, l]]) => <option key={k} value={k}>{l}</option>)}</select></div></div>
               <div className="field"><label>Mode</label><div className="control"><select value={f.mode} onChange={e => set('mode', e.target.value)}><option value="office">Office</option><option value="wfh">Work from home</option><option value="field">On field</option></select></div></div>

@@ -6,7 +6,7 @@ const employeeModel = require('../models/employee.model');
 const apiResponse = require('../utils/apiResponse');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
-const { todayISO, thisMonth, toMins, nowHHMM, shiftOf, hoursPerDay } = require('../utils/calculations');
+const { todayISO, thisMonth, toMins, nowHHMM, shiftOf, hoursPerDay, round2 } = require('../utils/calculations');
 
 // Selfies are stored on the row; list responses only say whether one exists.
 const pub = a => {
@@ -26,6 +26,8 @@ const pub = a => {
   }));
   return {
     ...rest,
+    ot_hours: round2(a.ot_hours),
+    fine_hours: round2(a.fine_hours),
     sessions: cleanSessions,
     session_count: cleanSessions.length + (a.clock_in ? 1 : 0),
     is_recheck: cleanSessions.length > 0,
@@ -152,8 +154,8 @@ const updateAttendance = catchAsync(async (req, res) => {
   }
 
   const updateData = { ...req.body };
-  if (updateData.ot_hours !== undefined) updateData.ot_hours = Number(updateData.ot_hours) || 0;
-  if (updateData.fine_hours !== undefined) updateData.fine_hours = Number(updateData.fine_hours) || 0;
+  if (updateData.ot_hours !== undefined) updateData.ot_hours = round2(updateData.ot_hours);
+  if (updateData.fine_hours !== undefined) updateData.fine_hours = round2(updateData.fine_hours);
 
   const updated = await attendanceModel.update(id, updateData);
   return apiResponse.success(res, pub(updated), 'Attendance updated successfully');
@@ -173,8 +175,8 @@ const markAttendance = catchAsync(async (req, res) => {
   const existing = await attendanceModel.findByEmpAndDate(emp, date);
   const patch = { status };
   if (mode !== undefined) patch.mode = mode;
-  if (ot_hours !== undefined) patch.ot_hours = Number(ot_hours) || 0;
-  if (fine_hours !== undefined) patch.fine_hours = Number(fine_hours) || 0;
+  if (ot_hours !== undefined) patch.ot_hours = round2(ot_hours);
+  if (fine_hours !== undefined) patch.fine_hours = round2(fine_hours);
   if (note !== undefined) patch.note = String(note);
   if (clock_in !== undefined) patch.clock_in = clock_in;
   if (clock_out !== undefined) patch.clock_out = clock_out;
@@ -201,8 +203,8 @@ const markAttendance = catchAsync(async (req, res) => {
       mode: mode || 'office',
       status,
       leave_type: leave_type ? String(leave_type) : '',
-      ot_hours: Number(ot_hours) || 0,
-      fine_hours: Number(fine_hours) || 0,
+      ot_hours: round2(ot_hours),
+      fine_hours: round2(fine_hours),
       note: note || ''
     });
   }

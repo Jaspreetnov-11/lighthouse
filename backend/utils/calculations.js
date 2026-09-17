@@ -66,6 +66,9 @@ const isLate = (shiftKey, clockIn) => {
   return t !== null && t > toMins(s.start) + cfg.graceMins;
 };
 
+/** Rounds a number to at most 2 decimal places (eliminating floating-point precision artifacts). */
+const round2 = n => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
+
 /** Overtime hours for a clock-out, counted only after the shift's OT threshold (2 decimals).
  *  nextDay = true when the clock-out happened after midnight (e.g. 01:30 the next day). */
 const otHoursFor = (shiftKey, clockOut, nextDay = false) => {
@@ -74,11 +77,11 @@ const otHoursFor = (shiftKey, clockOut, nextDay = false) => {
   const t = toMins(clockOut);
   if (t === null) return 0;
   const extra = t + (nextDay ? 1440 : 0) - toMins(s.otAfter);
-  return extra > 0 ? Math.round((extra / 60) * 100) / 100 : 0;
+  return extra > 0 ? round2(extra / 60) : 0;
 };
 
 /** Flexible shift overtime: minutes worked beyond the daily hours, in hours (2 decimals). */
-const flexibleOt = workedMins => { const extra = (Number(workedMins) || 0) - cfg.hoursPerDay * 60; return extra > 0 ? Math.round((extra / 60) * 100) / 100 : 0; };
+const flexibleOt = workedMins => { const extra = (Number(workedMins) || 0) - cfg.hoursPerDay * 60; return extra > 0 ? round2(extra / 60) : 0; };
 
 /** Minutes worked on a punch across all sessions (handles multiple punches/rechecking and out_next_day). */
 const punchMinutes = row => {
@@ -164,5 +167,6 @@ module.exports = {
   flexibleOt,
   weekOffOf,
   calculateEarnedSalary,
-  formatINR
+  formatINR,
+  round2
 };

@@ -9,7 +9,7 @@ import { useModals } from '@/controllers/useModals';
 import { TaskModel, TodoModel } from '@/models';
 import { Avatar, Chip, Empty, GeoLink, Icon, LinkBtn, Panel, Pills, SectionTitle, StatusBars } from '@/views/ui';
 import { Bars, DonutChart, HBars, PairBars, Ring } from '@/views/ui/charts';
-import { assigneeIds, fmtD, hm, hrs1, inr, leaveBalance, MODE_LABEL, shiftDisplay, weekOffOf, overdue, pct, punchMinutes, thisMonth, todayISO, workedToday } from '@/lib/format';
+import { assigneeIds, fmtD, hm, hrs1, inr, leaveBalance, MODE_LABEL, round2, shiftDisplay, weekOffOf, overdue, pct, punchMinutes, thisMonth, todayISO, workedToday } from '@/lib/format';
 
 function TaskMini({ t, onOpen, onAccept }) {
   const { taskAssigneeNames } = useData();
@@ -57,7 +57,7 @@ function ClockCard() {
           <small>
             {st === 're_in' && <>Active since {r.clock_in} <GeoLink lat={r.in_lat} lng={r.in_lng} addr={r.in_addr} acc={r.in_acc} /> · {hm(prevMins)} worked earlier · tap Clock Out when done</>}
             {st === 'in' && <>Since {r.clock_in} <GeoLink lat={r.in_lat} lng={r.in_lng} addr={r.in_addr} acc={r.in_acc} /> · tap Clock Out when you leave</>}
-            {st === 'done' && <>Last out {r.clock_out} <GeoLink lat={r.out_lat} lng={r.out_lng} addr={r.out_addr} acc={r.out_acc} />{Number(r.ot_hours) ? ' · OT ' + r.ot_hours + 'h' : ''} · tap Re-Clock In to start another session</>}
+            {st === 'done' && <>Last out {r.clock_out} <GeoLink lat={r.out_lat} lng={r.out_lng} addr={r.out_addr} acc={r.out_acc} />{Number(r.ot_hours) ? ' · OT ' + round2(r.ot_hours) + 'h' : ''} · tap Re-Clock In to start another session</>}
             {st === 'off' && <>{me.name.split(' ')[0]}, your shift is {shiftDisplay(me.shift, settings)} · {clock.selfieIn ? 'selfie + location' : 'location'} is saved with each punch</>}
           </small>
         </div>
@@ -197,7 +197,7 @@ export function DashboardScreen() {
         <Kpi label="Late arrivals" value={st.late} sub={st.late ? 'after grace time' : 'none this month'} tone={st.late ? 'warn' : 'ok'} />
         <Kpi label="Productive hours" value={hrs1(myProd ? myProd.productiveMins : 0)} sub={myProd ? 'tasks ' + hrs1(myProd.ownMins) + (myProd.managedMins ? ' · managing ' + hrs1(myProd.managedMins) : '') + (myProd.breakMins ? ' · breaks −' + hrs1(myProd.breakMins) : '') : 'from task time'} tone={myProd && st.totalWorkedMinutes > 0 && myProd.productiveMins >= st.totalWorkedMinutes * 0.6 ? 'ok' : ''} />
         <Kpi label="Leaves left" value={myLeave.left} sub={'used ' + myLeave.used + ' of ' + myLeave.quota + (myLeave.pending ? ' · ' + myLeave.pending + ' pending' : '')} tone={myLeave.left === 0 ? 'bad' : myLeave.left <= 2 ? 'warn' : ''} />
-        <Kpi label="Overtime" value={(Number(st.otHours) || 0) + 'h'} sub={'paid at ' + ((d.settings && d.settings.otRate) || 1) + '× hourly'} />
+        <Kpi label="Overtime" value={round2(st.otHours) + 'h'} sub={'paid at ' + ((d.settings && d.settings.otRate) || 1) + '× hourly'} />
         <Kpi label="Tasks delivered" value={deliveredMine.length} sub={deliveredMine.length ? onTimeMine + ' on time' : 'this month'} tone={deliveredMine.length && onTimeMine === deliveredMine.length ? 'ok' : ''} />
         <Kpi label="Your pending pay" value={inr(meRow ? meRow.pendingBal : 0)} sub={meRow && meRow.earned !== undefined ? 'earned ' + inr(meRow.earned) + ' · paid ' + inr(meRow.paid) : 'this month'} />
       </div>
@@ -254,7 +254,7 @@ export function DashboardScreen() {
           <Kpi label="Team avg productive / day" value={hrs1(teamAvgProd)} sub={'per person · target ' + hoursPerDay + 'h 00m'} tone={teamAvgProd >= hoursPerDay * 60 ? 'ok' : teamAvgProd > 0 ? 'warn' : ''} />
           <Kpi label="Productive hours" value={hrs1(prod && prod.totals ? prod.totals.productiveMins : 0)} sub={prod && prod.totals ? 'of ' + hrs1(team.totalWorkedMinutes) + ' clocked' + (prod.totals.breakMins ? ' · breaks −' + hrs1(prod.totals.breakMins) : '') : 'from task time'} bar={prod && prod.totals ? pct(prod.totals.productiveMins, team.totalWorkedMinutes) : 0} tone={prod && prod.totals && team.totalWorkedMinutes > 0 && prod.totals.productiveMins >= team.totalWorkedMinutes * 0.6 ? 'ok' : ''} />
           <Kpi label="Team hours" value={hrs1(team.totalWorkedMinutes)} sub={'of ' + hrs1(team.expectedMinutesSoFar) + ' expected'} bar={pct(team.totalWorkedMinutes, team.expectedMinutesSoFar)} />
-          <Kpi label="Overtime hours" value={Math.round(team.otHours * 10) / 10 + 'h'} sub="across the team" />
+          <Kpi label="Overtime hours" value={round2(team.otHours) + 'h'} sub="across the team" />
           <Kpi label="Tasks delivered" value={deliveredAll.length} sub={overdueAll.length + ' overdue'} tone={overdueAll.length ? 'bad' : ''} />
           {isAdmin && <Kpi label="Payroll pending" value={inr(totalPending)} sub={<Link href="/payroll" className="link">Run payroll</Link>} tone={totalPending > 0 ? 'warn' : 'ok'} />}
         </div>
