@@ -7,7 +7,7 @@ import { useData } from '@/controllers/DataController';
 import { useUi } from '@/controllers/UiController';
 import { TaskModel } from '@/models';
 import { Avatar, Chip, Empty, Icon, LinkBtn, Panel, ReassignTaskModal, TaskChip } from '@/views/ui';
-import { assigneeIds, fmtD, hm, isRunning, overdue, STATUS_LABEL, takenMins, TASK_TYPES, todayISO } from '@/lib/format';
+import { assigneeIds, fmtD, hm, isRunning, overdue, sortTasksByLatest, STATUS_LABEL, takenMins, TASK_TYPES, todayISO } from '@/lib/format';
 
 export function SelfTaskScreen() {
   const { me } = useAuth();
@@ -25,22 +25,23 @@ export function SelfTaskScreen() {
   const [tab, setTab] = useState('active'); // 'active' | 'all' | 'completed'
 
   // Modal / Timer states
-  const [reassignTaskTarget, setReassignTaskTarget] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const [reassignTaskTarget, setReassignTaskTarget] = useState(null);
 
   useEffect(() => {
-    const tick = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(tick);
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
   }, []);
 
   // Filter tasks that are self-assigned (assigned to me and created by me, or where I am an assignee)
   const mySelfTasks = useMemo(() => {
     if (!me || !me.id) return [];
-    return d.tasks.filter(t => {
+    const filtered = d.tasks.filter(t => {
       const isAssignedToMe = assigneeIds(t).includes(me.id);
       const isCreatedByMe = t.assigned_by === me.id;
       return isAssignedToMe && isCreatedByMe;
     });
+    return sortTasksByLatest(filtered);
   }, [d.tasks, me]);
 
   const activeTasks = useMemo(() => mySelfTasks.filter(t => t.status !== 'completed'), [mySelfTasks]);
@@ -89,12 +90,39 @@ export function SelfTaskScreen() {
   };
 
   const handleStatusMove = async (id, to) => {
+    const t = d.tasks.find(x => x.id === id);
+    if (!t || t.status === to) return;
+    const nowISO = new Date().toISOString();
+    const optimisticPatch = { status: to, updated_at: nowISO };
+    if (to === 'progress') {
+      if (!t.started_at) {
+        optimisticPatch.started_at = nowISO;
+      } else if (t.status === 'approval' || t.status === 'changes') {
+        const prevMins = Number(t.taken_mins) || 0;
+        optimisticPatch.started_at = new Date(Date.now() - (prevMins * 60000)).toISOString();
+      }
+    } else if (to === 'approval') {
+      optimisticPatch.completed_at = nowISO;
+      optimisticPatch.taken_mins = takenMins(t);
+    } else if (to === 'completed') {
+      optimisticPatch.completed_at = nowISO;
+      optimisticPatch.completed = todayISO();
+      if (t.status === 'approval' && Number(t.taken_mins) > 0) {
+        optimisticPatch.taken_mins = Number(t.taken_mins);
+      } else {
+        optimisticPatch.taken_mins = takenMins(t);
+      }
+    }
+    if (d.updateTaskOptimistic) {
+      d.updateTaskOptimistic(id, optimisticPatch);
+    }
     try {
       await TaskModel.setStatus(id, to);
       toast(to === 'progress' ? 'Task resumed. Timer running.' : to === 'completed' ? 'Task marked completed.' : 'Task moved to ' + STATUS_LABEL[to]);
       await d.reload('tasks', 'projects', 'activity', 'alerts');
     } catch (err) {
       toast(err.message);
+      await d.reload('tasks');
     }
   };
 
@@ -399,7 +427,7 @@ export function SelfTaskScreen() {
                       >
                         <span>
                           {running && <i className="dot" />}
-                          {t.status === 'completed' ? 'Took' : 'Running'} <b>{hm(taken)}</b>
+                          {t.status === 'completed' || t.status === 'approval' ? 'Took' : 'Running'} <b>{hm(taken)}</b>
                         </span>
                         <span>
                           of est. <b>{hm(est)}</b>{isOver ? ' · over' : ''}

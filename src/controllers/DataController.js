@@ -4,7 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityModel, AttendanceModel, ClientModel, DepartmentModel, EmployeeModel, FileModel, HolidayModel, LeaveModel, PerformanceModel, ProductivityModel, ProjectModel, SettingsModel, TaskModel, TodoModel } from '@/models';
 import { useAuth } from './AuthController';
-import { managerIds, thisMonth } from '@/lib/format';
+import { managerIds, sortTasksByLatest, thisMonth } from '@/lib/format';
 
 const DataContext = createContext(null);
 
@@ -12,7 +12,7 @@ const LOADERS = {
   employees: () => EmployeeModel.list(),
   departments: () => DepartmentModel.list(),
   projects: () => ProjectModel.list(),
-  tasks: () => TaskModel.list().then(r => r.data || []),
+  tasks: () => TaskModel.list().then(r => sortTasksByLatest(r.data || [])),
   today: () => AttendanceModel.today(),
   leaves: () => LeaveModel.list(),
   holidays: () => HolidayModel.list(),
@@ -96,7 +96,16 @@ export function DataProvider({ children }) {
     };
   }, [state.employees, state.projects, me, isAdmin]);
 
-  const value = useMemo(() => ({ ...state, ...helpers, loaded, error, reload }), [state, helpers, loaded, error, reload]);
+  const updateTaskOptimistic = useCallback((taskId, patch) => {
+    setState(s => ({
+      ...s,
+      tasks: sortTasksByLatest(
+        (s.tasks || []).map(t => (t.id === taskId ? { ...t, ...patch, updated_at: new Date().toISOString() } : t))
+      )
+    }));
+  }, []);
+
+  const value = useMemo(() => ({ ...state, ...helpers, loaded, error, reload, updateTaskOptimistic }), [state, helpers, loaded, error, reload, updateTaskOptimistic]);
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
 

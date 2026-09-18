@@ -84,7 +84,8 @@ function taskSpan(t, now = Date.now()) {
   if (!t || !t.started_at) return null;
   const start = Date.parse(t.started_at);
   if (Number.isNaN(start)) return null;
-  const end = t.completed_at ? Date.parse(t.completed_at) : now;
+  const isFrozen = (t.status === 'approval' || t.status === 'completed' || t.status === 'changes') && t.completed_at;
+  const end = isFrozen ? Date.parse(t.completed_at) : (t.completed_at ? Date.parse(t.completed_at) : now);
   return end > start ? [start, Math.min(end, now)] : null;
 }
 

@@ -22,7 +22,9 @@ const EXTRA_COLUMNS = {
     ['completed_at', 'TEXT'],
     ['taken_mins', 'NUMERIC DEFAULT 0'],
     ['reassigned_by', "TEXT DEFAULT ''"],
-    ['reassign_note', "TEXT DEFAULT ''"]
+    ['reassign_note', "TEXT DEFAULT ''"],
+    ['created_at', "TEXT DEFAULT (datetime('now'))"],
+    ['updated_at', "TEXT DEFAULT (datetime('now'))"]
   ],
   lh_projects: [['client_id', "TEXT DEFAULT ''"], ['fee', 'NUMERIC DEFAULT 0']],
   lh_leaves: [['kind', "TEXT DEFAULT 'leave'"], ['remarks', "TEXT DEFAULT ''"]],
@@ -65,6 +67,9 @@ async function ensureColumns() {
   `);
   // Task status "On Hold" became "Changes" (changes requested by the reviewer)
   await db.run("UPDATE lh_tasks SET status = 'changes' WHERE status = 'hold'");
+  try {
+    await db.run("UPDATE lh_tasks SET updated_at = created_at WHERE (updated_at IS NULL OR updated_at = '') AND created_at IS NOT NULL AND created_at != ''");
+  } catch (e) { /* ignore */ }
 }
 
 async function seedSqlite() {

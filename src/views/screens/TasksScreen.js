@@ -10,7 +10,7 @@ import { saveCsv } from '@/lib/download';
 import { Avatar, Empty, Icon, LinkBtn, ReassignTaskModal, Seg, Sq, TaskChip } from '@/views/ui';
 import { Assignees } from '@/views/ui/Assignees';
 import { Pager, usePager } from '@/views/ui/Pager';
-import { assigneeIds, fmtD, hm, isRunning, overdue, STATUSES, STATUS_LABEL, takenMins, thisMonth, todayISO } from '@/lib/format';
+import { assigneeIds, fmtD, hm, isRunning, overdue, sortTasksByLatest, STATUSES, STATUS_LABEL, takenMins, thisMonth, todayISO } from '@/lib/format';
 
 const COL_CLS = { pipeline: '', progress: 'ip', approval: 'pa', completed: 'cp', changes: 'oh' };
 
@@ -58,7 +58,8 @@ function Timer({ t, now }) {
   const live = isRunning(t);
   const over = est > 0 && taken > est;
   if (!t.started_at) return <div className="timer"><span>Est. <b>{hm(est)}</b></span><span style={{ color: 'var(--muted)' }}>Timer starts on accept</span></div>;
-  return <div className={'timer' + (live ? ' live' : '') + (over ? ' over' : '')}><span>{live && <i className="dot"></i>}{t.status === 'completed' ? 'Took' : 'Running'} <b>{hm(taken)}</b></span><span>of est. <b>{hm(est)}</b>{over ? ' · over' : ''}</span></div>;
+  const isDoneOrLocked = t.status === 'completed' || t.status === 'approval';
+  return <div className={'timer' + (live ? ' live' : '') + (over ? ' over' : '')}><span>{live && <i className="dot"></i>}{isDoneOrLocked ? 'Took' : 'Running'} <b>{hm(taken)}</b></span><span>of est. <b>{hm(est)}</b>{over ? ' · over' : ''}</span></div>;
 }
 
 export function TasksScreen() {
@@ -191,7 +192,8 @@ export function TasksScreen() {
     if (range === 'today') list = list.filter(t => onDay(t, todayISO()));
     else if (range === 'day') list = list.filter(t => onDay(t, day));
     else if (range === 'month') list = list.filter(t => String(t.assigned || '').slice(0, 7) === month || String(t.completed || '').slice(0, 7) === month || (t.status !== 'completed' && String(t.deadline || '').slice(0, 7) === month));
-    return list;
+    // Always sort by latest updated or created first so newest/updated tasks are at the top
+    return sortTasksByLatest(list);
   }, [d, tab, member, dept, me, range, day, month]);
 
   const rangeBar = (
@@ -204,7 +206,42 @@ export function TasksScreen() {
   const emps = d.employees.filter(e => !dept || e.dept === dept);
   const listPager = usePager(tasks, 20);
 
-  const move = async (id, to) => { const t = d.tasks.find(x => x.id === id); if (!t || t.status === to) return; try { await TaskModel.setStatus(id, to); toast(to === 'progress' && t.status === 'pipeline' ? 'Accepted. Timer started.' : 'Moved to ' + STATUS_LABEL[to]); await d.reload('tasks', 'projects', 'activity', 'alerts'); } catch (err) { toast(err.message); } };
+  const move = async (id, to) => {
+    const t = d.tasks.find(x => x.id === id);
+    if (!t || t.status === to) return;
+    const nowISO = new Date().toISOString();
+    const optimisticPatch = { status: to, updated_at: nowISO };
+    if (to === 'progress') {
+      if (!t.started_at) {
+        optimisticPatch.started_at = nowISO;
+      } else if (t.status === 'approval' || t.status === 'changes') {
+        const prevMins = Number(t.taken_mins) || 0;
+        optimisticPatch.started_at = new Date(Date.now() - (prevMins * 60000)).toISOString();
+      }
+    } else if (to === 'approval') {
+      optimisticPatch.completed_at = nowISO;
+      optimisticPatch.taken_mins = takenMins(t);
+    } else if (to === 'completed') {
+      optimisticPatch.completed_at = nowISO;
+      optimisticPatch.completed = todayISO();
+      if (t.status === 'approval' && Number(t.taken_mins) > 0) {
+        optimisticPatch.taken_mins = Number(t.taken_mins);
+      } else {
+        optimisticPatch.taken_mins = takenMins(t);
+      }
+    }
+    if (d.updateTaskOptimistic) {
+      d.updateTaskOptimistic(id, optimisticPatch);
+    }
+    try {
+      await TaskModel.setStatus(id, to);
+      toast(to === 'progress' && t.status === 'pipeline' ? 'Accepted. Timer started.' : 'Moved to ' + STATUS_LABEL[to]);
+      await d.reload('tasks', 'projects', 'activity', 'alerts');
+    } catch (err) {
+      toast(err.message);
+      await d.reload('tasks');
+    }
+  };
   const del = async t => { if (!confirm('Delete "' + t.title + '"?')) return; try { await TaskModel.remove(t.id); toast('Task deleted.'); await d.reload('tasks', 'projects'); } catch (err) { toast(err.message); } };
   const reject = async t => {
     const reason = window.prompt(`Reject task "${t.title}" and return to previous assigner?\nOptional reason:`, '');
@@ -315,7 +352,7 @@ export function TasksScreen() {
 
   // ---- Mobile: a simple list with workflow buttons (the kanban board is desktop-only) ----
   if (isMobile) {
-    const mList = tasks.filter(t => mStatus === 'all' ? true : mStatus === 'open' ? t.status !== 'completed' : t.status === mStatus);
+    const mList = sortTasksByLatest(tasks.filter(t => mStatus === 'all' ? true : mStatus === 'open' ? t.status !== 'completed' : t.status === mStatus));
     const mCounts = { open: tasks.filter(t => t.status !== 'completed').length, all: tasks.length };
     STATUSES.forEach(k => { mCounts[k] = tasks.filter(t => t.status === k).length; });
     return (
@@ -388,7 +425,7 @@ export function TasksScreen() {
         {view === 'board' ? (
           <div className="board" ref={boardRef}>
             {STATUSES.map(k => {
-              const ts = tasks.filter(t => t.status === k); return (
+              const ts = sortTasksByLatest(tasks.filter(t => t.status === k)); return (
                 <div className={'col ' + COL_CLS[k] + (overCol === k ? ' over' : '')} key={k} onDragOver={ev => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; setOverCol(k); }} onDragLeave={ev => { if (ev.currentTarget.contains(ev.relatedTarget)) return; setOverCol(''); }} onDrop={ev => { ev.preventDefault(); const id = dragId || ev.dataTransfer.getData('text/plain'); setOverCol(''); setDragId(null); if (id) move(id, k); }}>
                   <div className="col-h">{STATUS_LABEL[k]}<span>{ts.length}</span></div>
                   {ts.map(card)}

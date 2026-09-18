@@ -48,20 +48,46 @@ async function assertCanManage(req, projectId, task = null) {
 function statusPatch(existing, status) {
   const patch = { status };
   const now = nowISO();
-  if (status === 'progress' && !existing.started_at) patch.started_at = now;
+  if (status === 'progress') {
+    if (!existing.started_at) {
+      patch.started_at = now;
+    } else if (existing.status === 'approval' || existing.status === 'changes') {
+      // Resuming task: continue timer from previously locked taken_mins
+      const prevMins = Number(existing.taken_mins) || 0;
+      patch.started_at = new Date(Date.now() - (prevMins * 60000)).toISOString();
+    }
+  }
   if (status === 'pipeline') {
     patch.started_at = null;
     patch.completed = null;
     patch.completed_at = null;
     patch.taken_mins = 0;
+  } else if (status === 'approval') {
+    // Lock running time immediately when task is submitted for approval
+    patch.completed = null;
+    patch.completed_at = now;
+    patch.taken_mins = existing.started_at ? minsSince(existing.started_at) : (Number(existing.taken_mins) || 0);
   } else if (status === 'completed') {
     patch.completed = todayISO();
     patch.completed_at = now;
-    patch.taken_mins = existing.started_at ? minsSince(existing.started_at) : 0;
+    // If it was already locked in approval, preserve the locked taken_mins!
+    if (existing.status === 'approval' && Number(existing.taken_mins) > 0) {
+      patch.taken_mins = Number(existing.taken_mins);
+    } else {
+      patch.taken_mins = existing.started_at ? minsSince(existing.started_at) : (Number(existing.taken_mins) || 0);
+    }
   } else if (existing.status === 'completed') {
     patch.completed = null;
     patch.completed_at = null;
     patch.taken_mins = 0;
+  } else if (status === 'changes') {
+    patch.completed = null;
+    patch.completed_at = null;
+    if (existing.status === 'approval' && Number(existing.taken_mins) > 0) {
+      patch.taken_mins = Number(existing.taken_mins);
+    } else if (existing.started_at) {
+      patch.taken_mins = minsSince(existing.started_at);
+    }
   }
   return patch;
 }
@@ -83,7 +109,13 @@ const getAllTasks = catchAsync(async (req, res) => {
   if (started.length) {
     const earliest = started.map(t => String(t.started_at).slice(0, 10)).sort()[0];
     const byEmp = worktime.attendanceIntervalsByEmp(await attendanceModel.getSince(earliest));
-    for (const t of tasks) t.worked_mins = t.started_at ? worktime.taskWorkedMinutes(t, byEmp) : 0;
+    for (const t of tasks) {
+      if (t.status === 'completed' || t.status === 'approval' || t.status === 'changes') {
+        t.worked_mins = Number(t.taken_mins) || (t.started_at ? worktime.taskWorkedMinutes(t, byEmp) : 0);
+      } else {
+        t.worked_mins = t.started_at ? worktime.taskWorkedMinutes(t, byEmp) : 0;
+      }
+    }
   }
   return apiResponse.success(res, tasks, 'Tasks fetched successfully', 200, { total, statusCounts });
 });
@@ -125,7 +157,15 @@ const updateTask = catchAsync(async (req, res) => {
   }
   if (updateData.flag !== undefined) updateData.flag = updateData.flag ? 1 : 0;
   if (updateData.mins !== undefined) updateData.mins = Number(updateData.mins) || 0;
-  if (updateData.status && updateData.status !== existing.status) { Object.assign(updateData, statusPatch(existing, updateData.status)); if (updateData.status === 'completed') updateData.taken_mins = await cappedTaken(existing); }
+  if (updateData.status && updateData.status !== existing.status) {
+    Object.assign(updateData, statusPatch(existing, updateData.status));
+    if (updateData.status === 'approval') {
+      const capped = await cappedTaken(existing);
+      if (capped > 0) updateData.taken_mins = capped;
+    } else if (updateData.status === 'completed' && existing.status !== 'approval') {
+      updateData.taken_mins = await cappedTaken(existing);
+    }
+  }
   else delete updateData.status;
 
   const updated = await taskModel.update(existing.id, updateData);
@@ -157,7 +197,12 @@ const updateTaskStatus = catchAsync(async (req, res) => {
   }
 
   const patch = statusPatch(existing, status);
-  if (status === 'completed') patch.taken_mins = await cappedTaken(existing);
+  if (status === 'approval') {
+    const capped = await cappedTaken(existing);
+    if (capped > 0) patch.taken_mins = capped;
+  } else if (status === 'completed' && existing.status !== 'approval') {
+    patch.taken_mins = await cappedTaken(existing);
+  }
   const updated = await taskModel.update(existing.id, patch);
 
   const who = req.user.name;

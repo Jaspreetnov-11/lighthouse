@@ -89,7 +89,7 @@ class BaseModel {
     if (!cols) return { ...data };
     const clean = {};
     for (const key of Object.keys(data)) {
-      if (cols.has(key)) clean[key] = data[key];
+      if (cols.has(key)) clean[key] = data[key] === undefined ? null : data[key];
     }
     return clean;
   }

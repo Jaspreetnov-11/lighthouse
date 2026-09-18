@@ -41,7 +41,10 @@ class TaskModel extends BaseModel {
       params.push(todayDate);
     }
 
-    sql += " ORDER BY CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END, t.deadline ASC, t.created_at DESC LIMIT ? OFFSET ?";
+    const orderCol = db.isPostgres
+      ? "COALESCE(NULLIF(t.updated_at, '')::timestamptz, NULLIF(t.created_at, '')::timestamptz, NULLIF(t.assigned, '')::timestamptz, '1970-01-01'::timestamptz) DESC"
+      : "REPLACE(COALESCE(NULLIF(t.updated_at, ''), NULLIF(t.created_at, ''), NULLIF(t.assigned, ''), '1970-01-01'), ' ', 'T') DESC";
+    sql += ` ORDER BY ${orderCol}, t.id DESC LIMIT ? OFFSET ?`;
     params.push(Number(limit), Number(offset));
     return db.all(sql, params);
   }

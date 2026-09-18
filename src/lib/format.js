@@ -99,15 +99,57 @@ export const managerIds = p => {
 };
 export const greeting = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; };
 
-/** Minutes taken on a task: stored when completed, live (since accept) while in progress. */
+/** Minutes taken on a task: locked when submitted for approval or completed; live (since accept) only while in progress. */
 export const takenMins = (t, now = Date.now()) => {
   if (!t) return 0;
+  if (t.status === 'completed' || t.status === 'approval' || t.status === 'changes') {
+    if (t.taken_mins !== undefined && t.taken_mins !== null && Number(t.taken_mins) > 0) {
+      return Number(t.taken_mins);
+    }
+    if (t.started_at && t.completed_at) {
+      const end = new Date(t.completed_at).getTime();
+      const start = new Date(t.started_at).getTime();
+      if (!isNaN(end) && !isNaN(start) && end >= start) return Math.round((end - start) / 60000);
+    }
+    return Number(t.taken_mins) || 0;
+  }
   if (t.worked_mins !== undefined && t.worked_mins !== null) return Number(t.worked_mins) || 0; // only time while clocked in
-  if (t.status === 'completed') return Number(t.taken_mins) || 0;
-  if (t.started_at) return Math.max(0, Math.round((now - new Date(t.started_at).getTime()) / 60000));
-  return 0;
+  if (t.status === 'progress' && t.started_at) return Math.max(0, Math.round((now - new Date(t.started_at).getTime()) / 60000));
+  return Number(t.taken_mins) || 0;
 };
-export const isRunning = t => Boolean(t && t.started_at && t.status !== 'completed');
+export const isRunning = t => Boolean(t && t.started_at && t.status === 'progress');
+
+/** Parse date/timestamp safely across browsers (handles SQLite 'YYYY-MM-DD HH:mm:ss', ISO strings, dates). */
+export const parseTaskDate = d => {
+  if (!d) return 0;
+  if (typeof d === 'number') return d;
+  const s = String(d).trim();
+  if (!s) return 0;
+  const iso = s.includes(' ') && !s.includes('T') ? s.replace(' ', 'T') : s;
+  const time = new Date(iso).getTime();
+  return isNaN(time) ? 0 : time;
+};
+
+/** Extract the most recent activity timestamp for a task (updated_at, created_at, started_at, completed_at, assigned). */
+export const getTaskLatestTime = t => {
+  if (!t) return 0;
+  return Math.max(
+    parseTaskDate(t.updated_at),
+    parseTaskDate(t.created_at),
+    parseTaskDate(t.started_at),
+    parseTaskDate(t.completed_at),
+    parseTaskDate(t.assigned)
+  );
+};
+
+/** Sort tasks array in descending order so latest assigned or updated tasks are at the top. */
+export const sortTasksByLatest = (tasks = []) => {
+  return (tasks || []).slice().sort((a, b) => {
+    const diff = getTaskLatestTime(b) - getTaskLatestTime(a);
+    if (diff !== 0) return diff;
+    return String(b.id || '').localeCompare(String(a.id || ''));
+  });
+};
 
 /** Leave days (kind 'leave') a request uses inside a calendar year, skipping week-off days. */
 export const leaveDaysIn = (l, year, weekOff = [0]) => {
