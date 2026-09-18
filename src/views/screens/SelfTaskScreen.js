@@ -29,7 +29,7 @@ export function SelfTaskScreen() {
   const [reassignTaskTarget, setReassignTaskTarget] = useState(null);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30000);
+    const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
   }, []);
 

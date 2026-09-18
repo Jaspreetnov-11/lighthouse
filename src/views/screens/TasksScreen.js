@@ -175,7 +175,7 @@ export function TasksScreen() {
     const mq = window.matchMedia('(max-width: 768px)');
     const apply = () => setIsMobile(mq.matches);
     apply(); mq.addEventListener('change', apply);
-    const tick = setInterval(() => setNow(Date.now()), 30000); // live timers
+    const tick = setInterval(() => setNow(Date.now()), 10000); // live timers
     return () => { mq.removeEventListener('change', apply); clearInterval(tick); };
   }, []);
 

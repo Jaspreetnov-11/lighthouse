@@ -107,14 +107,25 @@ export const takenMins = (t, now = Date.now()) => {
       return Number(t.taken_mins);
     }
     if (t.started_at && t.completed_at) {
-      const end = new Date(t.completed_at).getTime();
-      const start = new Date(t.started_at).getTime();
-      if (!isNaN(end) && !isNaN(start) && end >= start) return Math.round((end - start) / 60000);
+      const end = parseTaskDate(t.completed_at);
+      const start = parseTaskDate(t.started_at);
+      if (end >= start && start > 0) return Math.round((end - start) / 60000);
+    }
+    if (t.worked_mins !== undefined && t.worked_mins !== null && Number(t.worked_mins) > 0) {
+      return Number(t.worked_mins);
     }
     return Number(t.taken_mins) || 0;
   }
-  if (t.worked_mins !== undefined && t.worked_mins !== null) return Number(t.worked_mins) || 0; // only time while clocked in
-  if (t.status === 'progress' && t.started_at) return Math.max(0, Math.round((now - new Date(t.started_at).getTime()) / 60000));
+  // While actively running in progress: calculate elapsed minutes since started_at
+  if (t.status === 'progress' && t.started_at) {
+    const startMs = parseTaskDate(t.started_at);
+    if (startMs > 0) {
+      return Math.max(0, Math.round((now - startMs) / 60000));
+    }
+  }
+  if (t.worked_mins !== undefined && t.worked_mins !== null && Number(t.worked_mins) > 0) {
+    return Number(t.worked_mins);
+  }
   return Number(t.taken_mins) || 0;
 };
 export const isRunning = t => Boolean(t && t.started_at && t.status === 'progress');
