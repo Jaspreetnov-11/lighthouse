@@ -63,7 +63,7 @@ const applyLeave = catchAsync(async (req, res) => {
     await activityModel.log(`${name} ${kind === 'wfh' ? 'will work from home' : 'is on leave'} (${detail})`);
   }
 
-  return apiResponse.created(res, leave, status === 'pending' ? (kind === 'wfh' ? 'Work-from-home request sent for approval' : 'Leave request sent for approval') : (kind === 'wfh' ? 'Work from home recorded' : 'Leave recorded'));
+  return apiResponse.created(res, leave, status === 'pending' ? (kind === 'wfh' ? 'Work-from-home request send for approval' : 'Leave request send for approval') : (kind === 'wfh' ? 'Work from home recorded' : 'Leave recorded'));
 });
 
 /** Admin approves or rejects a leave / WFH request; the person is notified. */

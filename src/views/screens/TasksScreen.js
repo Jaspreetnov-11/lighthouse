@@ -26,12 +26,12 @@ function useTaskActions() {
     const acts = [];
 
     // Streamlined workflow progression:
-    // In Pipeline -> Start -> Sent for Approval -> Completed -> Changes -> Start
+    // In Pipeline -> Start -> send for approval -> Completed -> Changes -> Start
     if (canMove) {
       if (t.status === 'pipeline') {
         acts.push(['progress', '▶ Start', 'go']);
       } else if (t.status === 'progress') {
-        acts.push(['approval', 'Sent for Approval', 'ok']);
+        acts.push(['approval', 'send for approval', 'ok']);
       } else if (t.status === 'approval') {
         acts.push(['completed', '✓ Completed', 'ok']);
         if (canManage) {
@@ -313,7 +313,7 @@ export function TasksScreen() {
     />
   );
 
-    // ---- Mobile: a simple list with workflow buttons (the kanban board is desktop-only) ----
+  // ---- Mobile: a simple list with workflow buttons (the kanban board is desktop-only) ----
   if (isMobile) {
     const mList = tasks.filter(t => mStatus === 'all' ? true : mStatus === 'open' ? t.status !== 'completed' : t.status === mStatus);
     const mCounts = { open: tasks.filter(t => t.status !== 'completed').length, all: tasks.length };
@@ -332,30 +332,32 @@ export function TasksScreen() {
         </div>
         {rangeBar}
         <div className="mtask-list">
-          {mList.map(t => { const od = overdue(t); const { acts, lead, mine, canManage, canReject } = actionsFor(t);
+          {mList.map(t => {
+            const od = overdue(t); const { acts, lead, mine, canManage, canReject } = actionsFor(t);
             const canReassign = (mine || lead || canManage) && t.status !== 'completed';
             const assignerName = t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : '');
             return (
-            <div className={'mtask' + (t.status === 'completed' ? ' done' : od ? ' late' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id}>
-              <div className="mtask-top"><span className="mtask-proj">{t.project_name || d.projName(t.project)}</span><span className={'chip ' + (od ? 'pk' : t.status === 'completed' ? 'gr' : 'gy')}>{t.status === 'completed' ? 'Done ' + fmtD(t.completed || t.deadline) : 'Due ' + fmtD(t.deadline)}</span></div>
-              <div className="mtask-title" role="button" onClick={() => setSheet(t.id)}>{t.title}</div>
-              {assignerName && (
-                <div style={{ fontSize: 11.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4, margin: '2px 0 4px' }}>
-                  <span style={{ opacity: 0.8 }}>Assign by:</span>
-                  <b style={{ color: 'var(--text)', fontWeight: 600 }}>{assignerName}</b>
-                  {t.reassigned_by && <span style={{ color: 'var(--accent)', marginLeft: 4 }}>(⇄ Reassigned by {d.empName(t.reassigned_by)})</span>}
+              <div className={'mtask' + (t.status === 'completed' ? ' done' : od ? ' late' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id}>
+                <div className="mtask-top"><span className="mtask-proj">{t.project_name || d.projName(t.project)}</span><span className={'chip ' + (od ? 'pk' : t.status === 'completed' ? 'gr' : 'gy')}>{t.status === 'completed' ? 'Done ' + fmtD(t.completed || t.deadline) : 'Due ' + fmtD(t.deadline)}</span></div>
+                <div className="mtask-title" role="button" onClick={() => setSheet(t.id)}>{t.title}</div>
+                {assignerName && (
+                  <div style={{ fontSize: 11.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4, margin: '2px 0 4px' }}>
+                    <span style={{ opacity: 0.8 }}>Assign by:</span>
+                    <b style={{ color: 'var(--text)', fontWeight: 600 }}>{assignerName}</b>
+                    {t.reassigned_by && <span style={{ color: 'var(--accent)', marginLeft: 4 }}>(⇄ Reassigned by {d.empName(t.reassigned_by)})</span>}
+                  </div>
+                )}
+                <div className="mtask-row"><Assignees task={t} /><TaskChip status={t.status} /></div>
+                <div className="tcard" style={{ padding: 0, border: 0, background: 'none' }}><Timer t={t} now={now} /></div>
+                <div className="mtask-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
+                  {acts.slice(0, 2).map(([k, l, cls]) => <button key={k} className={cls === 'go' || cls === 'ok' ? 'mtask-done' : 'pill'} onClick={() => move(t.id, k)}>{l}</button>)}
+                  {canReject && <button className="pill" onClick={() => reject(t)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,100,100,0.3)' }}>✕ Reject</button>}
+                  {canReassign && <button type="button" className="pill" onClick={() => setReassignTaskTarget(t)}>⇄ Reassign</button>}
+                  {lead && <button className="mini-btn" onClick={() => modals.open('task', t.id)} aria-label="Edit"><Icon name="edit" /></button>}
+                  {lead && <button className="mini-btn" onClick={() => del(t)} aria-label="Delete">✕</button>}
                 </div>
-              )}
-              <div className="mtask-row"><Assignees task={t} /><TaskChip status={t.status} /></div>
-              <div className="tcard" style={{ padding: 0, border: 0, background: 'none' }}><Timer t={t} now={now} /></div>
-              <div className="mtask-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
-                {acts.slice(0, 2).map(([k, l, cls]) => <button key={k} className={cls === 'go' || cls === 'ok' ? 'mtask-done' : 'pill'} onClick={() => move(t.id, k)}>{l}</button>)}
-                {canReject && <button className="pill" onClick={() => reject(t)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,100,100,0.3)' }}>✕ Reject</button>}
-                {canReassign && <button type="button" className="pill" onClick={() => setReassignTaskTarget(t)}>⇄ Reassign</button>}
-                {lead && <button className="mini-btn" onClick={() => modals.open('task', t.id)} aria-label="Edit"><Icon name="edit" /></button>}
-                {lead && <button className="mini-btn" onClick={() => del(t)} aria-label="Delete">✕</button>}
-              </div>
-            </div>); })}
+              </div>);
+          })}
           {!mList.length && <Empty>No tasks here</Empty>}
         </div>
         {taskSheet}
@@ -385,13 +387,15 @@ export function TasksScreen() {
         </div>
         {view === 'board' ? (
           <div className="board" ref={boardRef}>
-            {STATUSES.map(k => { const ts = tasks.filter(t => t.status === k); return (
-              <div className={'col ' + COL_CLS[k] + (overCol === k ? ' over' : '')} key={k} onDragOver={ev => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; setOverCol(k); }} onDragLeave={ev => { if (ev.currentTarget.contains(ev.relatedTarget)) return; setOverCol(''); }} onDrop={ev => { ev.preventDefault(); const id = dragId || ev.dataTransfer.getData('text/plain'); setOverCol(''); setDragId(null); if (id) move(id, k); }}>
-                <div className="col-h">{STATUS_LABEL[k]}<span>{ts.length}</span></div>
-                {ts.map(card)}
-                {!ts.length && <div className="col-empty">No tasks</div>}
-              </div>
-            ); })}
+            {STATUSES.map(k => {
+              const ts = tasks.filter(t => t.status === k); return (
+                <div className={'col ' + COL_CLS[k] + (overCol === k ? ' over' : '')} key={k} onDragOver={ev => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; setOverCol(k); }} onDragLeave={ev => { if (ev.currentTarget.contains(ev.relatedTarget)) return; setOverCol(''); }} onDrop={ev => { ev.preventDefault(); const id = dragId || ev.dataTransfer.getData('text/plain'); setOverCol(''); setDragId(null); if (id) move(id, k); }}>
+                  <div className="col-h">{STATUS_LABEL[k]}<span>{ts.length}</span></div>
+                  {ts.map(card)}
+                  {!ts.length && <div className="col-empty">No tasks</div>}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="panel" style={{ minWidth: 0 }}><div style={{ overflowX: 'auto' }}>
@@ -402,25 +406,25 @@ export function TasksScreen() {
               const canReassign = (mine || lead || canManage) && t.status !== 'completed';
               const assignerName = t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : '');
               return (
-              <div className={'task-row' + (od ? ' late' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id}>
-                <div><LinkBtn onClick={() => setSheet(t.id)} style={{ textAlign: 'left', fontWeight: 600 }}>{t.title}</LinkBtn><small>{t.project_name || d.projName(t.project)}{t.dept ? ' · ' + t.dept : ''}</small></div>
-                <div><Assignees task={t} /></div>
-                <div>
-                  <span style={{ fontSize: 13, color: 'var(--text)' }}>{assignerName || '—'}</span>
-                  {t.reassigned_by && <div style={{ fontSize: 11, color: 'var(--accent)' }}>⇄ Reassigned by {d.empName(t.reassigned_by)}</div>}
+                <div className={'task-row' + (od ? ' late' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id}>
+                  <div><LinkBtn onClick={() => setSheet(t.id)} style={{ textAlign: 'left', fontWeight: 600 }}>{t.title}</LinkBtn><small>{t.project_name || d.projName(t.project)}{t.dept ? ' · ' + t.dept : ''}</small></div>
+                  <div><Assignees task={t} /></div>
+                  <div>
+                    <span style={{ fontSize: 13, color: 'var(--text)' }}>{assignerName || '—'}</span>
+                    {t.reassigned_by && <div style={{ fontSize: 11, color: 'var(--accent)' }}>⇄ Reassigned by {d.empName(t.reassigned_by)}</div>}
+                  </div>
+                  <div><small>Due {fmtD(t.deadline)}</small></div>
+                  <div><small>{hm(t.mins)}</small></div>
+                  <div><TaskChip status={t.status} /></div>
+                  <div className="move">
+                    {acts.map(([k, l, cls]) => <button key={k} className={cls} onClick={() => move(t.id, k)}>{l}</button>)}
+                    {canReject && <button type="button" className="pill" onClick={() => reject(t)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,100,100,0.3)', fontSize: 11, padding: '2px 8px' }}>✕ Reject</button>}
+                    {canReassign && <button type="button" className="pill" onClick={() => setReassignTaskTarget(t)} style={{ fontSize: 11, padding: '2px 8px' }}>⇄ Reassign</button>}
+                    {lead && <button className="mini-btn" onClick={() => modals.open('task', t.id)} aria-label="Edit"><Icon name="edit" /></button>}
+                    {lead && <button className="mini-btn" onClick={() => del(t)} aria-label="Delete">✕</button>}
+                  </div>
                 </div>
-                <div><small>Due {fmtD(t.deadline)}</small></div>
-                <div><small>{hm(t.mins)}</small></div>
-                <div><TaskChip status={t.status} /></div>
-                <div className="move">
-                  {acts.map(([k, l, cls]) => <button key={k} className={cls} onClick={() => move(t.id, k)}>{l}</button>)}
-                  {canReject && <button type="button" className="pill" onClick={() => reject(t)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,100,100,0.3)', fontSize: 11, padding: '2px 8px' }}>✕ Reject</button>}
-                  {canReassign && <button type="button" className="pill" onClick={() => setReassignTaskTarget(t)} style={{ fontSize: 11, padding: '2px 8px' }}>⇄ Reassign</button>}
-                  {lead && <button className="mini-btn" onClick={() => modals.open('task', t.id)} aria-label="Edit"><Icon name="edit" /></button>}
-                  {lead && <button className="mini-btn" onClick={() => del(t)} aria-label="Delete">✕</button>}
-                </div>
-              </div>
-            );
+              );
             })}
             {!tasks.length && <Empty>No tasks</Empty>}
             <Pager pager={listPager} />
