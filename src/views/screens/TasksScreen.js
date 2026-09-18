@@ -295,6 +295,24 @@ export function TasksScreen() {
     </div>
   ) : null;
 
+  const reassignModal = (
+    <ReassignTaskModal
+      isOpen={!!reassignTaskTarget}
+      task={reassignTaskTarget}
+      employees={d.employees}
+      currentUserId={me?.id || ''}
+      onClose={() => setReassignTaskTarget(null)}
+      onReassign={async (assignees, note) => {
+        if (reassignTaskTarget) {
+          await TaskModel.reassign(reassignTaskTarget.id, assignees.join(','), note);
+          toast('Task reassigned successfully.');
+          setSheet('');
+          await d.reload('tasks', 'projects', 'activity', 'alerts');
+        }
+      }}
+    />
+  );
+
     // ---- Mobile: a simple list with workflow buttons (the kanban board is desktop-only) ----
   if (isMobile) {
     const mList = tasks.filter(t => mStatus === 'all' ? true : mStatus === 'open' ? t.status !== 'completed' : t.status === mStatus);
@@ -314,7 +332,8 @@ export function TasksScreen() {
         </div>
         {rangeBar}
         <div className="mtask-list">
-          {mList.map(t => { const od = overdue(t); const { acts, lead } = actionsFor(t);
+          {mList.map(t => { const od = overdue(t); const { acts, lead, mine, canManage, canReject } = actionsFor(t);
+            const canReassign = (mine || lead || canManage) && t.status !== 'completed';
             const assignerName = t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : '');
             return (
             <div className={'mtask' + (t.status === 'completed' ? ' done' : od ? ' late' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id}>
@@ -331,8 +350,8 @@ export function TasksScreen() {
               <div className="tcard" style={{ padding: 0, border: 0, background: 'none' }}><Timer t={t} now={now} /></div>
               <div className="mtask-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
                 {acts.slice(0, 2).map(([k, l, cls]) => <button key={k} className={cls === 'go' || cls === 'ok' ? 'mtask-done' : 'pill'} onClick={() => move(t.id, k)}>{l}</button>)}
-                {actionsFor(t).canReject && <button className="pill" onClick={() => reject(t)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,100,100,0.3)' }}>✕ Reject</button>}
-                {(actionsFor(t).mine || actionsFor(t).lead) && t.status !== 'completed' && <button className="pill" onClick={() => setReassignTaskTarget(t)}>⇄ Reassign</button>}
+                {canReject && <button className="pill" onClick={() => reject(t)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,100,100,0.3)' }}>✕ Reject</button>}
+                {canReassign && <button type="button" className="pill" onClick={() => setReassignTaskTarget(t)}>⇄ Reassign</button>}
                 {lead && <button className="mini-btn" onClick={() => modals.open('task', t.id)} aria-label="Edit"><Icon name="edit" /></button>}
                 {lead && <button className="mini-btn" onClick={() => del(t)} aria-label="Delete">✕</button>}
               </div>
@@ -340,6 +359,7 @@ export function TasksScreen() {
           {!mList.length && <Empty>No tasks here</Empty>}
         </div>
         {taskSheet}
+        {reassignModal}
       </div>
     );
   }
@@ -369,59 +389,45 @@ export function TasksScreen() {
               <div className={'col ' + COL_CLS[k] + (overCol === k ? ' over' : '')} key={k} onDragOver={ev => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; setOverCol(k); }} onDragLeave={ev => { if (ev.currentTarget.contains(ev.relatedTarget)) return; setOverCol(''); }} onDrop={ev => { ev.preventDefault(); const id = dragId || ev.dataTransfer.getData('text/plain'); setOverCol(''); setDragId(null); if (id) move(id, k); }}>
                 <div className="col-h">{STATUS_LABEL[k]}<span>{ts.length}</span></div>
                 {ts.map(card)}
-                {!ts.length && <div className="empty" style={{ padding: '24px 0', fontSize: 12 }}>{k === 'pipeline' ? 'No new tasks' : k === 'changes' ? 'No changes requested' : 'Nothing here'}</div>}
-              </div>); })}
+                {!ts.length && <div className="col-empty">No tasks</div>}
+              </div>
+            ); })}
           </div>
         ) : (
-          <div className="content"><div className="panel">
-            <div className="task-row head"><span>Task</span><span>Project</span><span>Assignee</span><span>Assigned</span><span>Deadline</span><span>Est / Taken</span><span>Status</span><span>Action</span></div>
+          <div className="panel" style={{ minWidth: 0 }}><div style={{ overflowX: 'auto' }}>
+            <div className="task-row head"><span>Task</span><span>Assignee</span><span>Assigned by</span><span>Dates</span><span>Time</span><span>Status</span><span>Action</span></div>
             {listPager.items.map(t => {
+              const od = overdue(t);
               const { acts, lead, mine, canManage, canReject } = actionsFor(t);
               const canReassign = (mine || lead || canManage) && t.status !== 'completed';
               const assignerName = t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : '');
               return (
-                <div className="task-row" key={t.id}>
-                  <LinkBtn onClick={() => (d.isLeaderOf(t.project) ? modals.open('task', t.id) : null)} style={{ textAlign: 'left' }}>{t.title}</LinkBtn>
-                  <span>{t.project_name || d.projName(t.project)}</span>
-                  <span>
-                    <div>{d.taskAssigneeNames(t)}</div>
-                    {assignerName && <small style={{ display: 'block', color: 'var(--muted)', fontSize: 11 }}>Assign by: <b style={{ color: 'var(--text)', fontWeight: 500 }}>{assignerName}</b></small>}
-                  </span>
-                  <span>{fmtD(t.assigned)}</span>
-                  <span style={{ color: overdue(t) ? 'var(--danger)' : undefined }}>{fmtD(t.deadline)}</span>
-                  <span>{hm(t.mins)} / {hm(takenMins(t, now))}</span>
-                  <TaskChip status={t.status} />
-                  <span>
-                    {acts.map(([k, l, cls]) => (
-                      <button key={k} className={cls === 'go' || cls === 'ok' ? 'pill on' : 'pill'} onClick={() => move(t.id, k)} style={{ fontSize: 11, padding: '2px 8px', marginRight: 6 }}>
-                        {l}
-                      </button>
-                    ))}
-                    {canReject && <button type="button" className="pill" onClick={() => reject(t)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,100,100,0.3)', fontSize: 11, padding: '2px 8px', marginRight: 6 }}>✕ Reject</button>}
-                    {canReassign && <button type="button" className="pill" onClick={() => setReassignTaskTarget(t)} style={{ fontSize: 11, padding: '2px 8px' }}>⇄ Reassign</button>}
-                  </span>
+              <div className={'task-row' + (od ? ' late' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id}>
+                <div><LinkBtn onClick={() => setSheet(t.id)} style={{ textAlign: 'left', fontWeight: 600 }}>{t.title}</LinkBtn><small>{t.project_name || d.projName(t.project)}{t.dept ? ' · ' + t.dept : ''}</small></div>
+                <div><Assignees task={t} /></div>
+                <div>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>{assignerName || '—'}</span>
+                  {t.reassigned_by && <div style={{ fontSize: 11, color: 'var(--accent)' }}>⇄ Reassigned by {d.empName(t.reassigned_by)}</div>}
                 </div>
-              );
+                <div><small>Due {fmtD(t.deadline)}</small></div>
+                <div><small>{hm(t.mins)}</small></div>
+                <div><TaskChip status={t.status} /></div>
+                <div className="move">
+                  {acts.map(([k, l, cls]) => <button key={k} className={cls} onClick={() => move(t.id, k)}>{l}</button>)}
+                  {canReject && <button type="button" className="pill" onClick={() => reject(t)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,100,100,0.3)', fontSize: 11, padding: '2px 8px' }}>✕ Reject</button>}
+                  {canReassign && <button type="button" className="pill" onClick={() => setReassignTaskTarget(t)} style={{ fontSize: 11, padding: '2px 8px' }}>⇄ Reassign</button>}
+                  {lead && <button className="mini-btn" onClick={() => modals.open('task', t.id)} aria-label="Edit"><Icon name="edit" /></button>}
+                  {lead && <button className="mini-btn" onClick={() => del(t)} aria-label="Delete">✕</button>}
+                </div>
+              </div>
+            );
             })}
             {!tasks.length && <Empty>No tasks</Empty>}
             <Pager pager={listPager} />
           </div></div>
         )}
       </div>
-      <ReassignTaskModal
-        isOpen={!!reassignTaskTarget}
-        task={reassignTaskTarget}
-        employees={d.employees}
-        currentUserId={me.id}
-        onClose={() => setReassignTaskTarget(null)}
-        onReassign={async (assignees, note) => {
-          if (reassignTaskTarget) {
-            await TaskModel.reassign(reassignTaskTarget.id, assignees.join(','), note);
-            toast('Task reassigned successfully.');
-            await d.reload('tasks', 'projects', 'activity', 'alerts');
-          }
-        }}
-      />
+      {reassignModal}
       {taskSheet}
     </>
   );

@@ -74,47 +74,49 @@ export function FormModal() {
           <button type="button" className="dialog-close" onClick={closeModal} aria-label="Close modal" title="Close">✕</button>
         </div>
         {modal.sub && <p>{modal.sub}</p>}
-        <form onSubmit={submit} noValidate>
-          {modal.custom ? modal.custom : (
-            <div className="grid2">
-              {(modal.fields || []).filter(f => !f.hidden || !f.hidden(values)).map(f => {
-                const locked = f.lockedHint ? f.lockedHint(values) : '';
-                const opts = optionsOf(f);
-                return (
-                <div key={f.name} className={'field' + (f.span ? ' span' : '') + (errors[f.name] ? ' invalid' : '')}>
-                  <label htmlFor={'m-' + f.name}>{f.label}{!f.required && <span className="opt"> (optional)</span>}</label>
-                  <div className="control">
-                    {f.type === 'select' ? (
-                      <select id={'m-' + f.name} value={values[f.name] ?? ''} disabled={!!locked} onChange={e => set(f.name, e.target.value)}>
-                        {f.placeholder && <option value="">{f.placeholder}</option>}
-                        {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-                      </select>
-                    ) : f.type === 'textarea' ? (
-                      <textarea id={'m-' + f.name} value={values[f.name] ?? ''} placeholder={f.placeholder} onChange={e => set(f.name, e.target.value)} />
-                    ) : f.type === 'multiselect' ? (
-                      <div>
-                        <div className={'ms-box' + (locked ? ' locked' : '')} id={'m-' + f.name}>
-                          {locked ? <div className="ms-count">{locked}</div> : opts.map(o => { const sel = Array.isArray(values[f.name]) && values[f.name].includes(o.v); return (
-                            <label key={o.v}><input type="checkbox" checked={!!sel} onChange={e => { const cur = Array.isArray(values[f.name]) ? values[f.name] : []; set(f.name, e.target.checked ? [...cur, o.v] : cur.filter(x => x !== o.v)); }} />{o.av && <span className={'avatar ' + o.av}>{o.ini}</span>}{o.l}{o.sub && <small>{o.sub}</small>}</label>
-                          ); })}
-                          {!locked && !opts.length && <div className="ms-count">Nothing to choose from</div>}
+        <form onSubmit={submit} noValidate className="dialog-form">
+          <div className="dialog-body">
+            {modal.custom ? modal.custom : (
+              <div className="grid2">
+                {(modal.fields || []).filter(f => !f.hidden || !f.hidden(values)).map(f => {
+                  const locked = f.lockedHint ? f.lockedHint(values) : '';
+                  const opts = optionsOf(f);
+                  return (
+                  <div key={f.name} className={'field' + (f.span ? ' span' : '') + (errors[f.name] ? ' invalid' : '')}>
+                    <label htmlFor={'m-' + f.name}>{f.label}{!f.required && <span className="opt"> (optional)</span>}</label>
+                    <div className="control">
+                      {f.type === 'select' ? (
+                        <select id={'m-' + f.name} value={values[f.name] ?? ''} disabled={!!locked} onChange={e => set(f.name, e.target.value)}>
+                          {f.placeholder && <option value="">{f.placeholder}</option>}
+                          {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                        </select>
+                      ) : f.type === 'textarea' ? (
+                        <textarea id={'m-' + f.name} value={values[f.name] ?? ''} placeholder={f.placeholder} onChange={e => set(f.name, e.target.value)} />
+                      ) : f.type === 'multiselect' ? (
+                        <div>
+                          <div className={'ms-box' + (locked ? ' locked' : '')} id={'m-' + f.name}>
+                            {locked ? <div className="ms-count">{locked}</div> : opts.map(o => { const sel = Array.isArray(values[f.name]) && values[f.name].includes(o.v); return (
+                              <label key={o.v}><input type="checkbox" checked={!!sel} onChange={e => { const cur = Array.isArray(values[f.name]) ? values[f.name] : []; set(f.name, e.target.checked ? [...cur, o.v] : cur.filter(x => x !== o.v)); }} />{o.av && <span className={'avatar ' + o.av}>{o.ini}</span>}{o.l}{o.sub && <small>{o.sub}</small>}</label>
+                            ); })}
+                            {!locked && !opts.length && <div className="ms-count">Nothing to choose from</div>}
+                          </div>
+                          {!locked && <div className="ms-count">{(Array.isArray(values[f.name]) ? values[f.name].length : 0)} selected</div>}
                         </div>
-                        {!locked && <div className="ms-count">{(Array.isArray(values[f.name]) ? values[f.name].length : 0)} selected</div>}
-                      </div>
-                    ) : f.type === 'file' ? (
-                      <input id={'m-' + f.name} type="file" accept={f.accept} onChange={e => set(f.name, e.target.files && e.target.files[0] ? e.target.files[0] : '')} />
-                    ) : (
-                      <input id={'m-' + f.name} type={f.type || 'text'} value={values[f.name] ?? ''} placeholder={f.placeholder} min={f.min} max={f.max} step={f.step} autoComplete="off" onChange={e => set(f.name, e.target.value)} disabled={!!f.disabled} readOnly={!!f.readOnly} />
-                    )}
+                      ) : f.type === 'file' ? (
+                        <input id={'m-' + f.name} type="file" accept={f.accept} onChange={e => set(f.name, e.target.files && e.target.files[0] ? e.target.files[0] : '')} />
+                      ) : (
+                        <input id={'m-' + f.name} type={f.type || 'text'} value={values[f.name] ?? ''} placeholder={f.placeholder} min={f.min} max={f.max} step={f.step} autoComplete="off" onChange={e => set(f.name, e.target.value)} disabled={!!f.disabled} readOnly={!!f.readOnly} />
+                      )}
+                    </div>
+                    {f.help && !errors[f.name] && <div className="help">{typeof f.help === 'function' ? f.help(values) : f.help}</div>}
+                    <div className="error">{errors[f.name]}</div>
                   </div>
-                  {f.help && !errors[f.name] && <div className="help">{typeof f.help === 'function' ? f.help(values) : f.help}</div>}
-                  <div className="error">{errors[f.name]}</div>
-                </div>
-              ); })}
-            </div>
-          )}
-          {errors._form && <div className="error" style={{ display: 'block' }}>{errors._form}</div>}
-          <div className="row">
+                ); })}
+              </div>
+            )}
+            {errors._form && <div className="error" style={{ display: 'block', marginTop: 10 }}>{errors._form}</div>}
+          </div>
+          <div className="row dialog-actions">
             <button type="button" className="btn btn-ghost" onClick={closeModal}>Cancel</button>
             <button type="submit" className={'btn btn-primary' + (busy ? ' loading' : '')} disabled={busy}><span className="spinner"></span>{modal.ok || 'Save'}</button>
           </div>

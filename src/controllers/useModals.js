@@ -28,7 +28,6 @@ export function useModals() {
         title: t ? 'Edit task' : 'Assign task', sub: t ? ('Assigned by ' + (assignerName || '—') + (t.assigned ? ' · ' + t.assigned : '')) : ('Assigning as ' + (me?.name || 'team leader') + ' · Pick project, department, and assignees.'), ok: t ? 'Save changes' : 'Assign task',
         fields: [
           { name: 'title', label: 'Task title', required: true, span: true, value: t ? t.title : '', placeholder: 'What needs to be done?' },
-          { name: 'assigned_by_display', label: 'Assign by', type: 'text', value: assignerName, disabled: true, readOnly: true, help: t ? 'Task assigner' : 'Task will be registered as assigned by you' },
           { name: 'project', label: 'Project', type: 'select', required: true, placeholder: 'Select project', options: projOpts, value: t ? t.project : (preset.project || '') },
           { name: 'dept', label: 'Department', type: 'select', required: true, placeholder: 'Select department', options: deptOpts, value: t ? (t.dept || '') : (preset.dept || ''), onChange: (v, all) => ({ assignees: (all.assignees || []).filter(x => { const e = employees.find(y => y.id === x); return e && e.dept === v; }) }) },
           { name: 'assignees', label: 'Assign to (one or more)', type: 'multiselect', required: true, span: true, error: 'Assign the task to at least one person.', optionsFor: people, lockedHint: v => (!v.project ? 'Select a project first' : !v.dept ? 'Select a department to see its people' : ''), value: t ? String(t.assignee || '').split(',').map(s => s.trim()).filter(Boolean) : (preset.assignee ? [preset.assignee] : []) },
@@ -36,7 +35,8 @@ export function useModals() {
           { name: 'status', label: 'Status', type: 'select', required: true, options: STATUSES.map(k => ({ v: k, l: STATUS_LABEL[k] })), value: t ? t.status : 'pipeline' },
           { name: 'assigned', label: 'Assigned on', type: 'date', required: true, value: t ? (t.assigned || '') : todayISO() },
           { name: 'deadline', label: 'Deadline', type: 'date', required: true, value: t ? (t.deadline || '') : todayISO(), validate: (v, all) => v >= all.assigned || 'Deadline cannot be before the assigned date.' },
-          { name: 'est_hours', label: 'Estimated time (hours)', type: 'number', required: true, value: t ? Math.round(((Number(t.mins) || 0) / 60) * 10) / 10 : 2, min: 0.5, step: 0.5, help: 'Compared with the actual time taken from accept to completion.' }
+          { name: 'est_hours', label: 'Estimated time (hours)', type: 'number', required: true, value: t ? Math.round(((Number(t.mins) || 0) / 60) * 10) / 10 : 2, min: 0.5, step: 0.5, help: 'Compared with actual time taken.' },
+          { name: 'assigned_by_display', label: 'Assign by', type: 'text', value: assignerName, disabled: true, readOnly: true, help: t ? 'Task assigner' : 'Task registered as assigned by you' }
         ],
         onSubmit: async d => {
           const body = { title: d.title, project: d.project, dept: d.dept, assignee: (Array.isArray(d.assignees) ? d.assignees : []).join(','), assigned: d.assigned, deadline: d.deadline, status: d.status, mins: Math.round((Number(d.est_hours) || 0) * 60), type: d.type };
