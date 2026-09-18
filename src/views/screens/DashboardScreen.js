@@ -145,9 +145,9 @@ export function DashboardScreen() {
   const todos = localTodos || d.todos;
   const perf = d.performance;
   const perfList = perf ? perf.list : [];
-  const top5 = perfList.filter(e => e.total > 0).slice(0, 5);
+  const top5 = perfList.filter(e => e.rank !== null && e.total > 0).slice(0, 5);
   const mePerf = perfList.find(e => e.id === me.id);
-  const rankedCount = perfList.filter(e => e.total > 0).length;
+  const rankedCount = perfList.filter(e => e.rank !== null).length;
   const [adding, setAdding] = useState(false);
 
   const addTodo = async e => {
@@ -202,7 +202,7 @@ export function DashboardScreen() {
         <Kpi label="Your pending pay" value={inr(meRow ? meRow.pendingBal : 0)} sub={meRow && meRow.earned !== undefined ? 'earned ' + inr(meRow.earned) + ' · paid ' + inr(meRow.paid) : 'this month'} />
       </div>
 
-      <SectionTitle>Performance <span className="lb-hint" title="Score out of 100 = software 50 + admin 50. Software half: points per delivered task (10 × task type × timeliness × efficiency) scaled so the month's best scorer gets 50. Creative work (Shoot, Edit, Design) weighs 1.5, Content 1.3, Social Media 1.0, Client Call 0.8, Other 0.7; on or before deadline ×1.5, up to 2 days late ×0.9, later ×0.6; finishing within allocated hours up to ×1.25. Admin half: marks out of 50 given in Settings → Admin controls → Ratings.">how scoring works</span></SectionTitle>
+      <SectionTitle>Performance <span className="lb-hint" title="Score out of 100 = software 50 + admin 50. Software half: Volume 20 (task points, creative work like Shoot / Edit / Design weighs 1.5, against the month's best and a minimum bar) + On time 15 (handed in on or before the deadline; the submit-for-approval time counts) + Efficiency 10 (time worked vs hours allocated; only time while clocked in and in progress) + Attendance 5 (days attended, minus late arrivals). Tasks waiting for approval already count. Admin half: marks out of 50 from Settings → Admin controls → Ratings.">how scoring works</span></SectionTitle>
       <div className="dash-2 lb-grid">
         <div className="panel">
           <div className="panel-h">Top performers this month<Chip tone="gy">{rankedCount} ranked</Chip></div>
@@ -223,13 +223,14 @@ export function DashboardScreen() {
             <div className="lb-hero"><b>{mePerf ? mePerf.total : 0}</b><span>/ 100 · {mePerf && mePerf.rank ? 'rank ' + mePerf.rank + ' of ' + rankedCount : 'not ranked yet'}</span></div>
             <div className="kv">
               <div><span>Software score</span><b>{mePerf ? mePerf.auto : 0} / 50</b></div>
+              {mePerf && mePerf.breakdown && <div className="lb-break"><span>Volume <b>{mePerf.breakdown.volume}</b>/20</span><span>On time <b>{mePerf.breakdown.onTime}</b>/15</span><span>Efficiency <b>{mePerf.breakdown.efficiency}</b>/10</span><span>Attendance <b>{mePerf.breakdown.attendance}</b>/5</span></div>}
               <div><span>Admin marks</span><b>{mePerf && mePerf.adminMarks !== null ? mePerf.adminMarks + ' / 50' : 'not given yet'}</b></div>
               <div><span>Tasks delivered</span><b>{mePerf ? mePerf.tasks : 0}</b></div>
               <div><span>Delivered on time</span><b>{mePerf && mePerf.onTimePct !== null ? mePerf.onTimePct + '%' : '—'}</b></div>
               <div><span>Creative tasks</span><b>{mePerf ? mePerf.creative : 0}</b></div>
               <div><span>Avg time per task</span><b>{mePerf && mePerf.avgTakenMins ? hrs1(mePerf.avgTakenMins) : '—'}</b></div>
             </div>
-            <small className="lb-tip">Half the score comes from your delivered tasks (creative work and on-time delivery earn the most), half from admin marks.</small>
+            <small className="lb-tip">Software half = volume + on-time + efficiency + attendance. Your timer stops the moment you submit for approval, and submitted tasks already count.</small>
           </div>
         </div>
       </div>

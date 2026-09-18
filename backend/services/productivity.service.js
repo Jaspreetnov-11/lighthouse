@@ -31,22 +31,21 @@ async function computeMonth(month = thisMonth()) {
   const now = Date.now();
   const [tasks, employees, rows] = await Promise.all([taskModel.findAll(), employeeModel.findAll({}, { orderBy: 'name ASC' }), attendanceModel.getMonthAttendanceAll(month)]);
   const byEmp = worktime.attendanceIntervalsByEmp(rows, now);
-  const inMonth = tasks.filter(t => { const sp = worktime.taskSpan(t, now); return sp && sp[1] > from && sp[0] < to; });
-  const clip = t => { const sp = worktime.taskSpan(t, now); return sp ? { ...t, started_at: new Date(Math.max(sp[0], from)).toISOString(), completed_at: new Date(Math.min(sp[1], to)).toISOString() } : t; };
-  const clipped = inMonth.map(clip);
+  const range = { from, to };
+  const inMonth = tasks.filter(t => worktime.taskSpans(t, now, range).length > 0);
 
   const out = {};
   for (const e of employees) out[e.id] = { id: e.id, name: e.name, dept: e.dept || '', role: e.role || '', ini: e.ini || '', av: e.av || '', ownMins: 0, managedMins: 0, breakMins: 0, clockMins: 0, tasksWorked: 0, tasksAssigned: 0, running: 0 };
   for (const e of employees) {
-    const mine = clipped.filter(t => worktime.assigneesOf(t).includes(e.id));
+    const mine = inMonth.filter(t => worktime.assigneesOf(t).includes(e.id));
     out[e.id].ownMins = worktime.personMinutes(mine, e.id, byEmp, { from, to, now });
     out[e.id].tasksWorked = mine.length;
-    out[e.id].running = mine.filter(t => t.status !== 'completed').length;
+    out[e.id].running = mine.filter(t => t.status === 'progress').length;
   }
-  for (const t of clipped) {
+  for (const t of inMonth) {
     const by = t.assigned_by && out[t.assigned_by];
     if (!by || worktime.assigneesOf(t).includes(t.assigned_by)) continue;
-    by.managedMins += worktime.taskWorkedMinutes(t, byEmp, now) * share + assignMins;
+    by.managedMins += worktime.taskWorkedMinutes(t, byEmp, now, range) * share + assignMins;
     by.tasksAssigned += 1;
   }
   for (const r of rows) { const e = out[r.emp]; if (!e) continue; e.breakMins += Number(r.break_mins) || 0; if (r.clock_in && r.clock_out) e.clockMins += punchMinutes(r); }

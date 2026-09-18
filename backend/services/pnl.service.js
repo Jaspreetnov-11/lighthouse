@@ -31,15 +31,10 @@ function monthBounds(month) {
 
 /** Minutes of a task that fall inside the month (see header). */
 function minutesInMonth(t, month, now, byEmp = {}) {
-  if (t.status === 'completed') return monthOf(t.completed_at || t.completed) === month ? Number(t.taken_mins) || 0 : 0;
   if (!t.started_at) return 0;
-  // Running task: only the time inside this month while the assignees were clocked in
+  // Only the work spans inside this month, while the assignees were clocked in
   const { start, end } = monthBounds(month);
-  const from = Math.max(new Date(t.started_at).getTime(), start.getTime());
-  const to = Math.min(now.getTime(), end.getTime());
-  if (to <= from) return 0;
-  const clipped = { ...t, started_at: new Date(from).toISOString(), completed_at: new Date(to).toISOString() };
-  return worktime.taskWorkedMinutes(clipped, byEmp, now.getTime());
+  return worktime.taskWorkedMinutes(t, byEmp, now.getTime(), { from: start.getTime(), to: end.getTime() });
 }
 
 class PnlService {
@@ -57,7 +52,7 @@ class PnlService {
     const [clients, projects, tasks, rates, attRows] = await Promise.all([
       clientModel.listWithProjectCounts(),
       db.all("SELECT id, name, client_id, client, billable, fee, start, alloc, status FROM lh_projects WHERE client_id <> ''"),
-      db.all("SELECT t.id, t.title, t.project, t.assignee, t.status, t.mins, t.taken_mins, t.started_at, t.completed_at, t.completed FROM lh_tasks t JOIN lh_projects p ON p.id = t.project WHERE p.client_id <> ''"),
+      db.all("SELECT t.id, t.title, t.project, t.assignee, t.status, t.mins, t.taken_mins, t.started_at, t.completed_at, t.completed, t.spans, t.updated_at FROM lh_tasks t JOIN lh_projects p ON p.id = t.project WHERE p.client_id <> ''"),
       this.hourlyRates(month),
       attendanceModel.getMonthAttendanceAll(month).catch(() => [])
     ]);

@@ -58,8 +58,8 @@ function Timer({ t, now }) {
   const live = isRunning(t);
   const over = est > 0 && taken > est;
   if (!t.started_at) return <div className="timer"><span>Est. <b>{hm(est)}</b></span><span style={{ color: 'var(--muted)' }}>Timer starts on accept</span></div>;
-  const isDoneOrLocked = t.status === 'completed' || t.status === 'approval';
-  return <div className={'timer' + (live ? ' live' : '') + (over ? ' over' : '')}><span>{live && <i className="dot"></i>}{isDoneOrLocked ? 'Took' : 'Running'} <b>{hm(taken)}</b></span><span>of est. <b>{hm(est)}</b>{over ? ' · over' : ''}</span></div>;
+  const isDoneOrLocked = t.status !== 'progress'; // timer only runs while in progress
+  return <div className={'timer' + (live ? ' live' : '') + (over ? ' over' : '')}><span>{live && <i className="dot"></i>}{t.status === 'changes' ? 'Paused' : isDoneOrLocked ? 'Took' : 'Running'} <b>{hm(taken)}</b></span><span>of est. <b>{hm(est)}</b>{over ? ' · over' : ''}</span></div>;
 }
 
 export function TasksScreen() {

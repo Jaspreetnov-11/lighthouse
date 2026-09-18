@@ -79,34 +79,44 @@ function attendanceIntervalsByEmp(rows, now = Date.now()) {
   return out;
 }
 
-/** [start, end] of a task's timer, or null if it never started. */
-function taskSpan(t, now = Date.now()) {
-  if (!t || !t.started_at) return null;
-  const start = Date.parse(t.started_at);
-  if (Number.isNaN(start)) return null;
-  const isFrozen = (t.status === 'approval' || t.status === 'completed' || t.status === 'changes') && t.completed_at;
-  const end = isFrozen ? Date.parse(t.completed_at) : (t.completed_at ? Date.parse(t.completed_at) : now);
-  return end > start ? [start, Math.min(end, now)] : null;
+/** Work spans stored on the task: [{ s, e? }] — one per "in progress" period. */
+function parseSpans(t) { const v = t && t.spans; if (!v) return []; try { const l = typeof v === 'string' ? JSON.parse(v) : v; return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+
+/**
+ * Merged [start, end] periods the task was actually being worked on (status "progress"), clipped to range.
+ * The timer stops when the task is submitted for approval and resumes only if changes are requested.
+ * Tasks from before spans existed fall back to started_at → completed_at (or now while in progress).
+ */
+function taskSpans(t, now = Date.now(), { from = -Infinity, to = Infinity } = {}) {
+  if (!t) return [];
+  let list = parseSpans(t).map(x => { const s = Date.parse(x.s); const e = x.e ? Date.parse(x.e) : (t.status === 'progress' ? now : s); return [s, e]; }).filter(x => !Number.isNaN(x[0]) && !Number.isNaN(x[1]));
+  if (!list.length && t.started_at) {
+    const s = Date.parse(t.started_at);
+    const e = t.completed_at ? Date.parse(t.completed_at) : (t.status === 'progress' ? now : (Date.parse(t.updated_at) || now));
+    if (!Number.isNaN(s) && !Number.isNaN(e)) list = [[s, e]];
+  }
+  return merge(list.map(([a, b]) => [Math.max(a, from), Math.min(b, to, now)]));
 }
+
+/** First start / last end of the work spans (null if never started). */
+function taskSpan(t, now = Date.now()) { const l = taskSpans(t, now); return l.length ? [l[0][0], l[l.length - 1][1]] : null; }
 
 const assigneesOf = t => String((t && t.assignee) || '').split(',').map(s => s.trim()).filter(Boolean);
 
-/** Minutes one person actually worked on one task (task span ∩ their attendance). */
-function taskMinutesFor(t, empId, byEmp, now = Date.now()) {
-  const span = taskSpan(t, now);
-  if (!span) return 0;
-  return overlapMinutes([span], byEmp[empId] || []);
+/** Minutes one person actually worked on one task (work spans ∩ their attendance). */
+function taskMinutesFor(t, empId, byEmp, now = Date.now(), range) {
+  return overlapMinutes(taskSpans(t, now, range), byEmp[empId] || []);
 }
 
 /** Total worked minutes on a task across its assignees. */
-function taskWorkedMinutes(t, byEmp, now = Date.now()) {
-  return assigneesOf(t).reduce((a, id) => a + taskMinutesFor(t, id, byEmp, now), 0);
+function taskWorkedMinutes(t, byEmp, now = Date.now(), range) {
+  return assigneesOf(t).reduce((a, id) => a + taskMinutesFor(t, id, byEmp, now, range), 0);
 }
 
 /** Minutes a person worked on any of `tasks` (union of spans ∩ attendance), optionally clipped to [from, to]. */
 function personMinutes(tasks, empId, byEmp, { from = -Infinity, to = Infinity, now = Date.now() } = {}) {
-  const spans = merge(tasks.filter(t => assigneesOf(t).includes(empId)).map(t => taskSpan(t, now)).filter(Boolean).map(([a, b]) => [Math.max(a, from), Math.min(b, to)]));
+  const spans = merge(tasks.filter(t => assigneesOf(t).includes(empId)).flatMap(t => taskSpans(t, now, { from, to })));
   return overlapMinutes(spans, byEmp[empId] || []);
 }
 
-module.exports = { attendanceIntervalsByEmp, taskSpan, taskMinutesFor, taskWorkedMinutes, personMinutes, overlapMinutes, merge, assigneesOf };
+module.exports = { attendanceIntervalsByEmp, parseSpans, taskSpans, taskSpan, taskMinutesFor, taskWorkedMinutes, personMinutes, overlapMinutes, merge, assigneesOf };

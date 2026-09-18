@@ -24,8 +24,9 @@ const worktime = require('../services/worktime.service');
 
 /** Minutes actually worked on a task: its timer span intersected with the assignees' clocked-in time. */
 async function cappedTaken(task) {
-  if (!task || !task.started_at) return 0;
-  const rows = await attendanceModel.getSince(String(task.started_at).slice(0, 10));
+  const first = worktime.taskSpan(task);
+  if (!task || !first) return 0;
+  const rows = await attendanceModel.getSince(new Date(first[0] - 86400000).toISOString().slice(0, 10));
   return worktime.taskWorkedMinutes(task, worktime.attendanceIntervalsByEmp(rows));
 }
 
@@ -44,51 +45,33 @@ async function assertCanManage(req, projectId, task = null) {
   return project;
 }
 
-/** Fields that change when the status moves; keeps the live timer consistent. */
+/**
+ * Fields that change when the status moves. The timer only runs while the task is "in progress":
+ * a work span opens on accept / resume and closes the moment the task is submitted for approval,
+ * so nobody's time keeps counting while they wait for a team leader.
+ */
 function statusPatch(existing, status) {
   const patch = { status };
   const now = nowISO();
-  if (status === 'progress') {
-    if (!existing.started_at) {
-      patch.started_at = now;
-    } else if (existing.status === 'approval' || existing.status === 'changes') {
-      // Resuming task: continue timer from previously locked taken_mins
-      const prevMins = Number(existing.taken_mins) || 0;
-      patch.started_at = new Date(Date.now() - (prevMins * 60000)).toISOString();
-    }
-  }
+  let spans = worktime.parseSpans(existing);
+  if (!spans.length && existing.started_at) spans = [{ s: existing.started_at, e: existing.completed_at || (existing.status === 'progress' ? null : (existing.updated_at || now)) }];
+  for (const sp of spans) if (!sp.e) sp.e = now; // leaving "progress" (or re-entering it) closes the open span
   if (status === 'pipeline') {
-    patch.started_at = null;
-    patch.completed = null;
-    patch.completed_at = null;
-    patch.taken_mins = 0;
+    spans = [];
+    patch.started_at = null; patch.completed = null; patch.completed_at = null; patch.taken_mins = 0;
+  } else if (status === 'progress') {
+    spans.push({ s: now });
+    if (!existing.started_at) patch.started_at = now;
+    patch.completed = null; patch.completed_at = null;
   } else if (status === 'approval') {
-    // Lock running time immediately when task is submitted for approval
-    patch.completed = null;
-    patch.completed_at = now;
-    patch.taken_mins = existing.started_at ? minsSince(existing.started_at) : (Number(existing.taken_mins) || 0);
+    patch.completed = null; patch.completed_at = now; // submitted: timer stops here
   } else if (status === 'completed') {
     patch.completed = todayISO();
-    patch.completed_at = now;
-    // If it was already locked in approval, preserve the locked taken_mins!
-    if (existing.status === 'approval' && Number(existing.taken_mins) > 0) {
-      patch.taken_mins = Number(existing.taken_mins);
-    } else {
-      patch.taken_mins = existing.started_at ? minsSince(existing.started_at) : (Number(existing.taken_mins) || 0);
-    }
-  } else if (existing.status === 'completed') {
-    patch.completed = null;
-    patch.completed_at = null;
-    patch.taken_mins = 0;
+    patch.completed_at = existing.status === 'approval' && existing.completed_at ? existing.completed_at : now; // keep the submit time
   } else if (status === 'changes') {
-    patch.completed = null;
-    patch.completed_at = null;
-    if (existing.status === 'approval' && Number(existing.taken_mins) > 0) {
-      patch.taken_mins = Number(existing.taken_mins);
-    } else if (existing.started_at) {
-      patch.taken_mins = minsSince(existing.started_at);
-    }
+    patch.completed = null; patch.completed_at = null;
   }
+  patch.spans = JSON.stringify(spans);
   return patch;
 }
 
@@ -109,13 +92,7 @@ const getAllTasks = catchAsync(async (req, res) => {
   if (started.length) {
     const earliest = started.map(t => String(t.started_at).slice(0, 10)).sort()[0];
     const byEmp = worktime.attendanceIntervalsByEmp(await attendanceModel.getSince(earliest));
-    for (const t of tasks) {
-      if (t.status === 'completed' || t.status === 'approval' || t.status === 'changes') {
-        t.worked_mins = Number(t.taken_mins) || (t.started_at ? worktime.taskWorkedMinutes(t, byEmp) : 0);
-      } else {
-        t.worked_mins = t.started_at ? worktime.taskWorkedMinutes(t, byEmp) : 0;
-      }
-    }
+    for (const t of tasks) t.worked_mins = worktime.taskWorkedMinutes(t, byEmp);
   }
   return apiResponse.success(res, tasks, 'Tasks fetched successfully', 200, { total, statusCounts });
 });
@@ -159,12 +136,7 @@ const updateTask = catchAsync(async (req, res) => {
   if (updateData.mins !== undefined) updateData.mins = Number(updateData.mins) || 0;
   if (updateData.status && updateData.status !== existing.status) {
     Object.assign(updateData, statusPatch(existing, updateData.status));
-    if (updateData.status === 'approval') {
-      const capped = await cappedTaken(existing);
-      if (capped > 0) updateData.taken_mins = capped;
-    } else if (updateData.status === 'completed' && existing.status !== 'approval') {
-      updateData.taken_mins = await cappedTaken(existing);
-    }
+    if (updateData.status !== 'pipeline') updateData.taken_mins = await cappedTaken({ ...existing, ...updateData });
   }
   else delete updateData.status;
 
@@ -197,12 +169,7 @@ const updateTaskStatus = catchAsync(async (req, res) => {
   }
 
   const patch = statusPatch(existing, status);
-  if (status === 'approval') {
-    const capped = await cappedTaken(existing);
-    if (capped > 0) patch.taken_mins = capped;
-  } else if (status === 'completed' && existing.status !== 'approval') {
-    patch.taken_mins = await cappedTaken(existing);
-  }
+  if (status !== 'pipeline') patch.taken_mins = await cappedTaken({ ...existing, ...patch });
   const updated = await taskModel.update(existing.id, patch);
 
   const who = req.user.name;
@@ -274,7 +241,8 @@ const reassignTask = catchAsync(async (req, res) => {
     reassigned_by: req.user.id,
     reassign_note: String(note || '').trim(),
     status: 'pipeline',
-    started_at: null
+    started_at: null,
+    spans: '[]'
   });
 
   const who = req.user.name;
@@ -327,7 +295,8 @@ const rejectTask = catchAsync(async (req, res) => {
     reassigned_by: '',
     reassign_note: '',
     status: 'pipeline',
-    started_at: null
+    started_at: null,
+    spans: '[]'
   });
 
   const who = req.user.name;
@@ -379,6 +348,7 @@ const createSelfTask = catchAsync(async (req, res) => {
     flag: 0,
     status: 'pipeline',
     started_at: null,
+    spans: '[]',
     completed_at: null,
     taken_mins: 0
   };
