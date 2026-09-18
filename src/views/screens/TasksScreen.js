@@ -26,12 +26,12 @@ function useTaskActions() {
     const acts = [];
 
     // Streamlined workflow progression:
-    // In Pipeline -> In Progress -> Pending Approval -> Completed -> Changes -> In Progress
+    // In Pipeline -> Start -> Sent for Approval -> Completed -> Changes -> Start
     if (canMove) {
       if (t.status === 'pipeline') {
-        acts.push(['progress', '▶ In Progress', 'go']);
+        acts.push(['progress', '▶ Start', 'go']);
       } else if (t.status === 'progress') {
-        acts.push(['approval', 'Pending Approval', 'ok']);
+        acts.push(['approval', 'Sent for Approval', 'ok']);
       } else if (t.status === 'approval') {
         acts.push(['completed', '✓ Completed', 'ok']);
         if (canManage) {
@@ -40,7 +40,7 @@ function useTaskActions() {
       } else if (t.status === 'completed') {
         acts.push(['changes', '⇄ Changes', 'warn']);
       } else if (t.status === 'changes') {
-        acts.push(['progress', '▶ In Progress', 'go']);
+        acts.push(['progress', '▶ Start', 'go']);
       }
     }
 
