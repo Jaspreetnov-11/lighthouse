@@ -37,7 +37,17 @@ function StaffAccess() {
   const toggleActive = async e => {
     const on = Number(e.active === undefined || e.active === null ? 1 : e.active) === 1;
     if (e.id === me.id) { toast('You cannot deactivate yourself.'); return; }
-    if (on && !confirm('Deactivate ' + e.name + '? They will not be able to log in until reactivated.')) return;
+    if (on) {
+      const ok = await confirm({
+        title: 'Deactivate Employee',
+        message: `Deactivate ${e.name}?`,
+        sub: 'They will not be able to log in until reactivated.',
+        okText: 'Deactivate',
+        cancelText: 'Cancel',
+        danger: true
+      });
+      if (!ok) return;
+    }
     await save(e, { active: !on }, on ? 'Deactivated' : 'Activated');
   };
 

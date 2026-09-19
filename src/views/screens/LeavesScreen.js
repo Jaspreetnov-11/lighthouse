@@ -43,7 +43,19 @@ export function LeavesScreen() {
   const act = async (l, fn, msg) => { setBusy(l.id); try { await fn(); toast(msg); await d.reload('leaves', 'activity', 'employees', 'myStats', 'teamSummary'); } catch (err) { toast(err.message); } finally { setBusy(''); } };
   const approve = l => act(l, () => LeaveModel.decide(l.id, 'approved'), 'Approved.');
   const reject = l => { const note = window.prompt('Reason for rejecting (optional):', ''); if (note === null) return; act(l, () => LeaveModel.decide(l.id, 'rejected', note), 'Rejected.'); };
-  const remove = l => { if (!confirm((l.status === 'pending' && l.emp === me.id ? 'Withdraw' : 'Delete') + ' this request?')) return; act(l, () => LeaveModel.remove(l.id), 'Removed.'); };
+  const remove = async l => {
+    const isWithdraw = l.status === 'pending' && l.emp === me.id;
+    const ok = await confirm({
+      title: isWithdraw ? 'Withdraw Request' : 'Delete Request',
+      message: (isWithdraw ? 'Withdraw' : 'Delete') + ' this request?',
+      sub: 'This action cannot be undone.',
+      okText: isWithdraw ? 'Withdraw' : 'Delete',
+      cancelText: 'Cancel',
+      danger: true
+    });
+    if (!ok) return;
+    act(l, () => LeaveModel.remove(l.id), 'Removed.');
+  };
 
   return (
     <div className="content">

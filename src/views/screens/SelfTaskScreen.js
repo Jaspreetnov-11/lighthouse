@@ -127,7 +127,15 @@ export function SelfTaskScreen() {
   };
 
   const handleDelete = async t => {
-    if (!confirm(`Delete your self-task "${t.title}"?`)) return;
+    const ok = await confirm({
+      title: 'Delete Self-Task',
+      message: `Delete your self-task "${t.title}"?`,
+      sub: 'This action cannot be undone.',
+      okText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true
+    });
+    if (!ok) return;
     try {
       await TaskModel.remove(t.id);
       toast('Self-task deleted.');

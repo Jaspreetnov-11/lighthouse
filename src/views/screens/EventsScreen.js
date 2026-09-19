@@ -23,7 +23,18 @@ export function EventsScreen() {
   const anniv = useMemo(() => d.employees.filter(e => e.joined && String(e.joined).slice(0, 4) !== String(year)).map(e => ({ e, d: nextOccurrence(String(e.joined).slice(5, 10)), years: year - Number(String(e.joined).slice(0, 4)) })).filter(x => daysUntil(x.d) <= WINDOW_DAYS).sort((a, b) => a.d - b.d), [d.employees, year]);
   const hols = useMemo(() => d.holidays.filter(h => h.date >= today).sort((a, b) => a.date.localeCompare(b.date)), [d.holidays, today]);
 
-  const delHoliday = async h => { if (!confirm('Remove holiday "' + h.name + '"?')) return; try { await HolidayModel.remove(h.id); await d.reload('holidays'); toast('Holiday removed.'); } catch (err) { toast(err.message); } };
+  const delHoliday = async h => {
+    const ok = await confirm({
+      title: 'Remove Holiday',
+      message: `Remove holiday "${h.name}"?`,
+      sub: 'This action cannot be undone.',
+      okText: 'Remove',
+      cancelText: 'Cancel',
+      danger: true
+    });
+    if (!ok) return;
+    try { await HolidayModel.remove(h.id); await d.reload('holidays'); toast('Holiday removed.'); } catch (err) { toast(err.message); }
+  };
 
   const Row = ({ av, title, sub, when, tone, right }) => (
     <div className="row" style={{ alignItems: 'center' }}>

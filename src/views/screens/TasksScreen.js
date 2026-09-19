@@ -311,7 +311,25 @@ export function TasksScreen() {
       await d.reload('tasks');
     }
   };
-  const del = async t => { if (!confirm('Delete "' + t.title + '"?')) return; try { await TaskModel.remove(t.id); toast('Task deleted.'); await d.reload('tasks', 'projects'); } catch (err) { toast(err.message); } };
+
+  const del = async t => {
+    const ok = await confirm({
+      title: 'Delete Task',
+      message: `Delete "${t.title}"?`,
+      sub: 'This action cannot be undone.',
+      okText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true
+    });
+    if (!ok) return;
+    try {
+      await TaskModel.remove(t.id);
+      toast('Task deleted.');
+      await d.reload('tasks', 'projects');
+    } catch (err) {
+      toast(err.message);
+    }
+  };
   const reject = async t => {
     const reason = window.prompt(`Reject task "${t.title}" and return to previous assigner?\nOptional reason:`, '');
     if (reason === null) return;

@@ -39,7 +39,26 @@ export function ProjectsScreen() {
   const maxD = Math.max(1, ...depts.map(x => x[1]), alloc);
   const tstat = STATUSES.map(k => [STATUS_COLOR[k], tasks.filter(t => t.status === k).length]);
   const files = d.files.filter(f => f.project === sel);
-  const remove = async () => { if (!p || !confirm('Delete ' + p.name + '? Its tasks become personal tasks.')) return; try { await ProjectModel.remove(p.id); toast('Project deleted.'); setSel(null); await d.reload('projects', 'tasks'); } catch (err) { toast(err.message); } };
+  const remove = async () => {
+    if (!p) return;
+    const ok = await confirm({
+      title: 'Delete Project',
+      message: `Delete ${p.name}?`,
+      sub: 'Its tasks become personal tasks.',
+      okText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true
+    });
+    if (!ok) return;
+    try {
+      await ProjectModel.remove(p.id);
+      toast('Project deleted.');
+      setSel(null);
+      await d.reload('projects', 'tasks');
+    } catch (err) {
+      toast(err.message);
+    }
+  };
 
   const body = () => {
     if (!p) return <Empty>Add a project to get started</Empty>;

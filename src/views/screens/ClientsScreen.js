@@ -31,7 +31,15 @@ export function ClientsScreen() {
   useEffect(() => { load(); }, [load, d.clients, d.projects, d.tasks]);
 
   const remove = async c => {
-    if (!confirm('Remove client "' + c.name + '"?')) return;
+    const ok = await confirm({
+      title: 'Remove Client',
+      message: `Remove client "${c.name}"?`,
+      sub: 'This action cannot be undone.',
+      okText: 'Remove',
+      cancelText: 'Cancel',
+      danger: true
+    });
+    if (!ok) return;
     try { await ClientModel.remove(c.id); toast('Client removed.'); await d.reload('clients'); } catch (err) { toast(err.message); }
   };
   const tone = n => (n > 0 ? 'ok' : n < 0 ? 'bad' : '');

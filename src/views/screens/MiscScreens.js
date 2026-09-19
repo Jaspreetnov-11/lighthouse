@@ -98,7 +98,18 @@ export function NotificationsScreen() {
   const enablePush = async () => { try { await push.enable(); toast('Push notifications enabled on this device.'); } catch (err) { toast(err.message); } };
   const markAll = async () => { try { await ActivityModel.markAllRead(); await d.reload('activity'); } catch (err) { toast(err.message); } };
   const removeOne = async id => { try { await ActivityModel.remove(id); await d.reload('activity'); } catch (err) { toast(err.message); } };
-  const clearAll = async () => { if (!confirm('Delete all notifications?')) return; try { await ActivityModel.clear(); await d.reload('activity'); toast('Notifications cleared.'); } catch (err) { toast(err.message); } };
+  const clearAll = async () => {
+    const ok = await confirm({
+      title: 'Clear Notifications',
+      message: 'Delete all notifications?',
+      sub: 'This action cannot be undone.',
+      okText: 'Clear All',
+      cancelText: 'Cancel',
+      danger: true
+    });
+    if (!ok) return;
+    try { await ActivityModel.clear(); await d.reload('activity'); toast('Notifications cleared.'); } catch (err) { toast(err.message); }
+  };
   const pager = usePager(d.activity.items, 20);
   const when = at => (at ? new Date(at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
   return (
@@ -126,7 +137,18 @@ export function FilesScreen() {
   const { isAdmin, me } = useAuth();
   const { toast, confirm } = useUi();
   const modals = useModals();
-  const del = async id => { if (!confirm('Remove this file?')) return; try { await FileModel.remove(id); await d.reload('files'); toast('File removed.'); } catch (err) { toast(err.message); } };
+  const del = async id => {
+    const ok = await confirm({
+      title: 'Remove File',
+      message: 'Remove this file?',
+      sub: 'This action cannot be undone.',
+      okText: 'Remove',
+      cancelText: 'Cancel',
+      danger: true
+    });
+    if (!ok) return;
+    try { await FileModel.remove(id); await d.reload('files'); toast('File removed.'); } catch (err) { toast(err.message); }
+  };
   const pager = usePager(d.files, 20);
   return (
     <div className="content">

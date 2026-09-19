@@ -36,7 +36,26 @@ export function DepartmentsScreen() {
   const totalMins = d.tasks.reduce((a, t) => a + (Number(t.mins) || 0), 0) || 1;
   const share = x => { const ids = new Set(d.employees.filter(e => e.dept === x.name).map(e => e.id)); return Math.round((d.tasks.filter(t => assigneeIds(t).some(id => ids.has(id))).reduce((a, t) => a + (Number(t.mins) || 0), 0) / totalMins) * 100); };
   const files = d.files.filter(f => mIds.has(f.assigned_by));
-  const remove = async () => { if (!dep || !confirm('Delete ' + dep.name + '?')) return; try { await DepartmentModel.remove(dep.id); toast('Department deleted.'); setSel(null); await d.reload('departments'); } catch (err) { toast(err.message); } };
+  const remove = async () => {
+    if (!dep) return;
+    const ok = await confirm({
+      title: 'Delete Department',
+      message: `Delete department "${dep.name}"?`,
+      sub: 'This action cannot be undone.',
+      okText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true
+    });
+    if (!ok) return;
+    try {
+      await DepartmentModel.remove(dep.id);
+      toast('Department deleted.');
+      setSel(null);
+      await d.reload('departments');
+    } catch (err) {
+      toast(err.message);
+    }
+  };
 
   const body = () => {
     if (tab === 'projects') return <div className="panel" style={{ margin: '0 20px' }}><div className="panel-h">Projects ({projIds.length})</div><div className="list" style={{ padding: '0 16px 12px' }}>{projIds.map(id => d.projById[id]).filter(Boolean).map(p => <div className="row" key={p.id}><span className="avatar sm p">{ini(p.name)}</span><span style={{ flex: 1 }}>{p.name}</span><b>{hm(tasks.filter(t => t.project === p.id).reduce((a, t) => a + (Number(t.mins) || 0), 0))}</b></div>)}{!projIds.length && <Empty>No projects yet</Empty>}</div></div>;

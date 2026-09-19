@@ -28,7 +28,18 @@ export function PaymentsScreen() {
   const totalPending = d.employees.reduce((a, e) => a + (Number(e.pendingBal) || 0), 0);
   const sum = t => rows.filter(p => p.type === t).reduce((a, p) => a + (Number(p.amount) || 0), 0);
   const paidOut = rows.filter(p => p.type !== 'Fine').reduce((a, p) => a + (Number(p.amount) || 0), 0);
-  const del = async id => { if (!confirm('Delete this payment?')) return; try { await PaymentModel.remove(id); toast('Payment deleted.'); await Promise.all([load(), d.reload('employees')]); } catch (err) { toast(err.message); } };
+  const del = async id => {
+    const ok = await confirm({
+      title: 'Delete Payment',
+      message: 'Delete this payment record?',
+      sub: 'This action cannot be undone and will affect employee balance.',
+      okText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true
+    });
+    if (!ok) return;
+    try { await PaymentModel.remove(id); toast('Payment deleted.'); await Promise.all([load(), d.reload('employees')]); } catch (err) { toast(err.message); }
+  };
   const exportCsv = async () => { try { saveBlob(await ReportModel.download('payments-ledger'), 'payments-all.csv'); } catch (err) { toast(err.message); } };
 
   return (
@@ -60,7 +71,26 @@ export function PayrollScreen() {
   const rows = useMemo(() => (pr && pr.rows) || [], [pr]);
   const pager = usePager(rows, 20);
   const s = (pr && pr.summary) || { staffCount: 0, totalSalary: 0, totalEarned: 0, totalPaid: 0, totalPending: 0 };
-  const payAll = async () => { const due = rows.filter(r => r.pending > 0); if (!due.length) { toast('Nothing pending.'); return; } if (!confirm('Record salary payments for ' + due.length + ' staff totalling ' + inr(s.totalPending) + '?')) return; try { const r = await PayrollModel.payAll(month); toast('Payroll recorded for ' + r.count + ' staff.'); await Promise.all([load(), d.reload('employees', 'activity')]); } catch (err) { toast(err.message); } };
+  const payAll = async () => {
+    const due = rows.filter(r => r.pending > 0);
+    if (!due.length) { toast('Nothing pending.'); return; }
+    const ok = await confirm({
+      title: 'Pay All Pending Salaries',
+      message: `Record salary payments for ${due.length} staff totalling ${inr(s.totalPending)}?`,
+      sub: 'This will generate salary payment entries for all staff with pending balances.',
+      okText: 'Confirm & Pay All',
+      cancelText: 'Cancel',
+      danger: false
+    });
+    if (!ok) return;
+    try {
+      const r = await PayrollModel.payAll(month);
+      toast('Payroll recorded for ' + r.count + ' staff.');
+      await Promise.all([load(), d.reload('employees', 'activity')]);
+    } catch (err) {
+      toast(err.message);
+    }
+  };
   const exportCsv = async () => { try { saveBlob(await ReportModel.download('payroll-summary', { month }), 'payroll-' + month + '.csv'); } catch (err) { toast(err.message); } };
 
   return (
