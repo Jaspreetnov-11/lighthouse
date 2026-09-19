@@ -99,9 +99,78 @@ export const managerIds = p => {
 };
 export const greeting = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; };
 
-/** Minutes taken on a task: locked when submitted for approval or completed; live (since accept) only while in progress. */
-export const takenMins = (t, now = Date.now()) => {
+export const parseUserTimers = (v) => {
+  if (!v) return {};
+  try {
+    return typeof v === 'string' ? JSON.parse(v) : (typeof v === 'object' && v !== null ? v : {});
+  } catch (e) {
+    return {};
+  }
+};
+
+export const getUserTaskState = (t, userId) => {
+  if (!t) return null;
+  const assignees = assigneeIds(t);
+  const isMulti = assignees.length > 1;
+  if (isMulti && userId && t.user_timers) {
+    const timers = parseUserTimers(t.user_timers);
+    if (timers && timers[userId]) {
+      return timers[userId];
+    }
+  }
+  return {
+    status: t.status,
+    started_at: t.started_at,
+    completed_at: t.completed_at,
+    taken_mins: t.taken_mins,
+    worked_mins: t.worked_mins
+  };
+};
+
+export const isUserRunning = (t, userId) => {
+  if (!t) return false;
+  const isMulti = assigneeIds(t).length > 1;
+  if (isMulti && userId) {
+    const u = getUserTaskState(t, userId);
+    return Boolean(u && u.status === 'progress' && u.started_at);
+  }
+  return Boolean(t.started_at && t.status === 'progress');
+};
+
+export const userTakenMins = (t, userId, now = Date.now()) => {
   if (!t) return 0;
+  const isMulti = assigneeIds(t).length > 1;
+  if (isMulti && userId) {
+    const u = getUserTaskState(t, userId);
+    if (!u) return 0;
+    if (u.status === 'completed' || u.status === 'approval' || u.status === 'changes') {
+      if (u.taken_mins !== undefined && u.taken_mins !== null && Number(u.taken_mins) > 0) {
+        return Number(u.taken_mins);
+      }
+      if (u.started_at && u.completed_at) {
+        const end = parseTaskDate(u.completed_at);
+        const start = parseTaskDate(u.started_at);
+        if (end >= start && start > 0) return Math.round((end - start) / 60000);
+      }
+      return Number(u.taken_mins) || 0;
+    }
+    if (u.status === 'progress' && u.started_at) {
+      const startMs = parseTaskDate(u.started_at);
+      if (startMs > 0) {
+        return Math.max(0, Math.round((now - startMs) / 60000));
+      }
+    }
+    return Number(u.taken_mins) || 0;
+  }
+  return takenMins(t, now);
+};
+
+/** Minutes taken on a task: locked when submitted for approval or completed; live (since accept) only while in progress. */
+export const takenMins = (t, now = Date.now(), userId = null) => {
+  if (!t) return 0;
+  if (userId && assigneeIds(t).length > 1) {
+    return userTakenMins(t, userId, now);
+  }
   if (t.status === 'completed' || t.status === 'approval' || t.status === 'changes') {
     if (t.taken_mins !== undefined && t.taken_mins !== null && Number(t.taken_mins) > 0) {
       return Number(t.taken_mins);
@@ -128,7 +197,13 @@ export const takenMins = (t, now = Date.now()) => {
   }
   return Number(t.taken_mins) || 0;
 };
-export const isRunning = t => Boolean(t && t.started_at && t.status === 'progress');
+export const isRunning = (t, userId = null) => {
+  if (!t) return false;
+  if (userId && assigneeIds(t).length > 1) {
+    return isUserRunning(t, userId);
+  }
+  return Boolean(t.started_at && t.status === 'progress');
+};
 
 /** Parse date/timestamp safely across browsers (handles SQLite 'YYYY-MM-DD HH:mm:ss', ISO strings, dates). */
 export const parseTaskDate = d => {

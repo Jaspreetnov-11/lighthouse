@@ -87,9 +87,16 @@ function parseSpans(t) { const v = t && t.spans; if (!v) return []; try { const 
  * The timer stops when the task is submitted for approval and resumes only if changes are requested.
  * Tasks from before spans existed fall back to started_at → completed_at (or now while in progress).
  */
-function taskSpans(t, now = Date.now(), { from = -Infinity, to = Infinity } = {}) {
+function taskSpans(t, now = Date.now(), { from = -Infinity, to = Infinity, empId = null } = {}) {
   if (!t) return [];
-  let list = parseSpans(t).map(x => { const s = Date.parse(x.s); const e = x.e ? Date.parse(x.e) : (t.status === 'progress' ? now : s); return [s, e]; }).filter(x => !Number.isNaN(x[0]) && !Number.isNaN(x[1]));
+  let raw = parseSpans(t);
+  if (empId) {
+    const hasTagged = raw.some(x => x && x.u);
+    if (hasTagged) {
+      raw = raw.filter(x => !x.u || x.u === empId);
+    }
+  }
+  let list = raw.map(x => { const s = Date.parse(x.s); const e = x.e ? Date.parse(x.e) : (t.status === 'progress' ? now : s); return [s, e]; }).filter(x => !Number.isNaN(x[0]) && !Number.isNaN(x[1]));
   if (!list.length && t.started_at) {
     const s = Date.parse(t.started_at);
     const e = t.completed_at ? Date.parse(t.completed_at) : (t.status === 'progress' ? now : (Date.parse(t.updated_at) || now));
@@ -105,7 +112,12 @@ const assigneesOf = t => String((t && t.assignee) || '').split(',').map(s => s.t
 
 /** Minutes one person actually worked on one task (work spans ∩ their attendance). */
 function taskMinutesFor(t, empId, byEmp, now = Date.now(), range) {
-  return overlapMinutes(taskSpans(t, now, range), byEmp[empId] || []);
+  const r = typeof range === 'object' && range !== null ? range : {};
+  const spans = taskSpans(t, now, { ...r, empId });
+  if (!byEmp) {
+    return Math.round(spans.reduce((sum, [a, b]) => sum + Math.max(0, b - a), 0) / 60000);
+  }
+  return overlapMinutes(spans, byEmp[empId] || []);
 }
 
 /** Total worked minutes on a task across its assignees. */
@@ -115,7 +127,10 @@ function taskWorkedMinutes(t, byEmp, now = Date.now(), range) {
 
 /** Minutes a person worked on any of `tasks` (union of spans ∩ attendance), optionally clipped to [from, to]. */
 function personMinutes(tasks, empId, byEmp, { from = -Infinity, to = Infinity, now = Date.now() } = {}) {
-  const spans = merge(tasks.filter(t => assigneesOf(t).includes(empId)).flatMap(t => taskSpans(t, now, { from, to })));
+  const spans = merge(tasks.filter(t => assigneesOf(t).includes(empId)).flatMap(t => taskSpans(t, now, { from, to, empId })));
+  if (!byEmp) {
+    return Math.round(spans.reduce((sum, [a, b]) => sum + Math.max(0, b - a), 0) / 60000);
+  }
   return overlapMinutes(spans, byEmp[empId] || []);
 }
 

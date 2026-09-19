@@ -11,7 +11,7 @@ import { saveCsv } from '@/lib/download';
 import { Avatar, Chip, DateBtn, Donut, Empty, Icon, Legend, LinkBtn, Panel, Search, Sq, Stat, TaskChip, Tabs } from '@/views/ui';
 import { Pager, usePager } from '@/views/ui/Pager';
 import { ImportStaff } from '@/views/screens/ImportStaff';
-import { assigneeIds, avFor, fmtD, fmtDY, hm, ini, inr, overdue, shiftDisplay, STATUSES, STATUS_COLOR, STATUS_LABEL, thisMonth } from '@/lib/format';
+import { assigneeIds, avFor, fmtD, fmtDY, getUserTaskState, hm, ini, inr, overdue, shiftDisplay, STATUSES, STATUS_COLOR, STATUS_LABEL, thisMonth, userTakenMins } from '@/lib/format';
 import {
   StaffSalaryStructure,
   StaffSalaryOverview,
@@ -177,7 +177,8 @@ export function StaffProfileScreen({ id }) {
   const st = stats || { present: 0, half: 0, absent: 0, leave: 0, unaccounted: 0, workdaysSoFar: 0, avgWorkingMinutes: 0 };
   const projIds = [...new Set(myTasks.filter(t => t.project).map(t => t.project))];
   const projs = projIds.map(pid => d.projById[pid]).filter(Boolean).filter(p => tab === 'all' || (tab === 'bill' ? p.billable : !p.billable));
-  const tstat = STATUSES.map(k => [STATUS_COLOR[k], myTasks.filter(t => t.status === k).length]);
+  const getEmpStatus = t => (assigneeIds(t).length > 1) ? (getUserTaskState(t, id)?.status || t.status) : t.status;
+  const tstat = STATUSES.map(k => [STATUS_COLOR[k], myTasks.filter(t => getEmpStatus(t) === k).length]);
   const topP = Object.entries(myTasks.filter(t => t.project).reduce((m, t) => { m[t.project] = (m[t.project] || 0) + (Number(t.mins) || 0); return m; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   const remove = async () => {
@@ -347,7 +348,13 @@ export function StaffProfileScreen({ id }) {
             </div>
             <div className="emp-bottom">
               <div className="panel"><div className="panel-h">All Projects ({projIds.length})</div><Tabs items={[['all', 'All'], ['bill', 'Billable'], ['non', 'Non-billable']]} value={tab} onChange={setTab} style={{ padding: '0 12px' }} /><div className="list" style={{ padding: '8px 12px' }}>{projs.map(p => <div className="row" key={p.id}><span className="avatar sm p">{ini(p.name)}</span><span style={{ flex: 1 }}>{p.name}</span><Chip tone={p.billable ? 'gr' : 'gy'}>{p.billable ? 'Billable' : 'Non-billable'}</Chip></div>)}{!projs.length && <Empty>No projects</Empty>}{topP.length > 0 && <div style={{ borderTop: '1px solid var(--line-soft)', marginTop: 8, paddingTop: 8 }}>{topP.map(([p, m]) => <div className="row" key={p}><span style={{ flex: 1, fontSize: 12.5 }}>{d.projName(p)}</span><b>{hm(m)}</b></div>)}</div>}</div></div>
-              <div className="panel"><div className="panel-h">Tasks ({myTasks.length})</div><div style={{ overflowX: 'auto' }}><table><thead><tr><th>Task</th><th>Project</th><th>Assigned</th><th>Deadline</th><th>Est / Taken</th><th>Status</th></tr></thead><tbody>{taskPager.items.map(t => <tr key={t.id}><td><LinkBtn onClick={() => modals.open('task', t.id)} style={{ textAlign: 'left' }}>{t.title}</LinkBtn></td><td>{t.project_name || d.projName(t.project)}</td><td>{fmtD(t.assigned)}</td><td style={{ color: overdue(t) ? 'var(--danger)' : undefined }}>{fmtD(t.deadline)}</td><td>{hm(t.mins)} / {hm(t.taken_mins)}</td><td><TaskChip status={t.status} /></td></tr>)}</tbody></table>{!myTasks.length && <Empty icon="file">No tasks found</Empty>}</div><Pager pager={taskPager} /></div>
+              <div className="panel"><div className="panel-h">Tasks ({myTasks.length})</div><div style={{ overflowX: 'auto' }}><table><thead><tr><th>Task</th><th>Project</th><th>Assigned</th><th>Deadline</th><th>Est / Taken</th><th>Status</th></tr></thead><tbody>{taskPager.items.map(t => {
+                const empStatus = getEmpStatus(t);
+                const empTaken = (assigneeIds(t).length > 1) ? userTakenMins(t, id) : t.taken_mins;
+                return (
+                  <tr key={t.id}><td><LinkBtn onClick={() => modals.open('task', t.id)} style={{ textAlign: 'left' }}>{t.title}</LinkBtn></td><td>{t.project_name || d.projName(t.project)}</td><td>{fmtD(t.assigned)}</td><td style={{ color: overdue(t) ? 'var(--danger)' : undefined }}>{fmtD(t.deadline)}</td><td>{hm(t.mins)} / {hm(empTaken)}</td><td><TaskChip status={empStatus} /></td></tr>
+                );
+              })}</tbody></table>{!myTasks.length && <Empty icon="file">No tasks found</Empty>}</div><Pager pager={taskPager} /></div>
             </div>
           </>
         )}

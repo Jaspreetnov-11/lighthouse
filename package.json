@@ -16,7 +16,8 @@
     "test:security": "node backend/tests/test_security.js",
     "test:recheck": "node backend/tests/test_recheck.js",
     "test:production": "node backend/tests/test_production_readiness.js",
-    "test:all": "node backend/tests/test_production_readiness.js && node backend/tests/test_security.js && node backend/tests/test_recheck.js"
+    "test:multi-timer": "node backend/tests/test_multi_assignee_timer.js",
+    "test:all": "node backend/tests/test_production_readiness.js && node backend/tests/test_security.js && node backend/tests/test_recheck.js && node backend/tests/test_multi_assignee_timer.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

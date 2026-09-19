@@ -9,15 +9,18 @@ import { useModals } from '@/controllers/useModals';
 import { TaskModel, TodoModel } from '@/models';
 import { Avatar, Chip, Empty, GeoLink, Icon, LinkBtn, Panel, Pills, SectionTitle, StatusBars } from '@/views/ui';
 import { Bars, DonutChart, HBars, PairBars, Ring } from '@/views/ui/charts';
-import { assigneeIds, fmtD, hm, hrs1, inr, leaveBalance, MODE_LABEL, round2, shiftDisplay, weekOffOf, overdue, pct, punchMinutes, thisMonth, todayISO, workedToday } from '@/lib/format';
+import { assigneeIds, fmtD, getUserTaskState, hm, hrs1, inr, leaveBalance, MODE_LABEL, round2, shiftDisplay, weekOffOf, overdue, pct, punchMinutes, thisMonth, todayISO, workedToday } from '@/lib/format';
 
 function TaskMini({ t, onOpen, onAccept }) {
   const { taskAssigneeNames } = useData();
+  const { me } = useAuth();
+  const uState = getUserTaskState(t, me?.id);
+  const isPipeline = uState ? uState.status === 'pipeline' : t.status === 'pipeline';
   return (
     <div className="row" style={{ alignItems: 'flex-start', gap: 8 }}>
       <Chip tone={overdue(t) ? 'pk' : 'gy'} style={{ flex: '0 0 auto' }}>{fmtD(t.deadline)}</Chip>
       <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500 }}>{t.title}</div><small style={{ color: 'var(--muted)' }}>{t.project_name || 'Project'} · {taskAssigneeNames(t)}</small></div>
-      {t.status === 'pipeline' && onAccept ? <button className="pill on" style={{ height: 28, fontSize: 11.5 }} onClick={() => onAccept(t.id)}>Accept</button> : <LinkBtn onClick={() => onOpen(t.id)}>Open</LinkBtn>}
+      {isPipeline && onAccept ? <button className="pill on" style={{ height: 28, fontSize: 11.5 }} onClick={() => onAccept(t.id)}>Accept</button> : <LinkBtn onClick={() => onOpen(t.id)}>Open</LinkBtn>}
     </div>
   );
 }

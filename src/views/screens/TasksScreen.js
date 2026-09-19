@@ -10,7 +10,7 @@ import { saveCsv } from '@/lib/download';
 import { Avatar, Empty, Icon, LinkBtn, ReassignTaskModal, Seg, Sq, TaskChip } from '@/views/ui';
 import { Assignees } from '@/views/ui/Assignees';
 import { Pager, usePager } from '@/views/ui/Pager';
-import { assigneeIds, fmtD, hm, isRunning, overdue, sortTasksByLatest, STATUSES, STATUS_LABEL, takenMins, thisMonth, todayISO } from '@/lib/format';
+import { assigneeIds, fmtD, getUserTaskState, hm, isRunning, isUserRunning, overdue, parseUserTimers, sortTasksByLatest, STATUSES, STATUS_LABEL, takenMins, thisMonth, todayISO, userTakenMins } from '@/lib/format';
 
 const COL_CLS = { pipeline: '', progress: 'ip', approval: 'pa', completed: 'cp', changes: 'oh' };
 
@@ -18,48 +18,98 @@ function useTaskActions() {
   const { me } = useAuth();
   const { isLeaderOf } = useData();
   return t => {
-    const mine = assigneeIds(t).includes(me.id);
+    const ids = assigneeIds(t);
+    const isMulti = ids.length > 1;
+    const mine = ids.includes(me?.id);
     const lead = isLeaderOf(t.project);
-    const isCreator = t.assigned_by === me.id;
-    const canManage = lead || isCreator || me.role === 'admin' || me.access === 'admin' || me.access === 'manager';
+    const isCreator = t.assigned_by === me?.id;
+    const canManage = lead || isCreator || me?.role === 'admin' || me?.access === 'admin' || me?.access === 'manager';
     const canMove = mine || canManage;
     const acts = [];
+
+    // For multi-assignee task where current user is an assignee, check user's specific status!
+    const uState = (isMulti && mine && me?.id) ? getUserTaskState(t, me.id) : null;
+    const effectiveStatus = uState ? uState.status : t.status;
 
     // Streamlined workflow progression:
     // In Pipeline -> Start -> send for approval -> Completed -> Changes -> Start
     if (canMove) {
-      if (t.status === 'pipeline') {
+      if (effectiveStatus === 'pipeline') {
         acts.push(['progress', '▶ Start', 'go']);
-      } else if (t.status === 'progress') {
+      } else if (effectiveStatus === 'progress') {
         acts.push(['approval', 'send for approval', 'ok']);
-      } else if (t.status === 'approval') {
-        acts.push(['completed', '✓ Completed', 'ok']);
+      } else if (effectiveStatus === 'approval') {
         if (canManage) {
+          acts.push(['completed', '✓ Completed', 'ok']);
           acts.push(['changes', 'Changes', 'warn']);
         }
-      } else if (t.status === 'completed') {
-        acts.push(['changes', '⇄ Changes', 'warn']);
-      } else if (t.status === 'changes') {
+      } else if (effectiveStatus === 'completed') {
+        if (canManage) {
+          acts.push(['changes', '⇄ Changes', 'warn']);
+        }
+      } else if (effectiveStatus === 'changes') {
         acts.push(['progress', '▶ Start', 'go']);
       }
     }
 
-    const canReject = mine && t.status === 'pipeline' && Boolean(
-      (t.reassigned_by && t.reassigned_by !== me.id) ||
-      (t.assigned_by && t.assigned_by !== me.id)
+    const canReject = mine && effectiveStatus === 'pipeline' && Boolean(
+      (t.reassigned_by && t.reassigned_by !== me?.id) ||
+      (t.assigned_by && t.assigned_by !== me?.id)
     );
-    return { acts, mine, lead, canManage, canReject };
+    return { acts, mine, lead, canManage, canReject, effectiveStatus };
   };
 }
 
-function Timer({ t, now }) {
+function Timer({ t, now, currentUserId }) {
   const est = Number(t.mins) || 0;
-  const taken = takenMins(t, now);
-  const live = isRunning(t);
+  const ids = assigneeIds(t);
+  const isMulti = ids.length > 1;
+  const mine = currentUserId && ids.includes(currentUserId);
+
+  const uState = (isMulti && mine) ? getUserTaskState(t, currentUserId) : null;
+  const effectiveStatus = uState ? uState.status : t.status;
+  const taken = (isMulti && mine) ? userTakenMins(t, currentUserId, now) : takenMins(t, now);
+  const live = (isMulti && mine) ? isUserRunning(t, currentUserId) : isRunning(t);
+  const startedAt = uState ? uState.started_at : t.started_at;
   const over = est > 0 && taken > est;
-  if (!t.started_at) return <div className="timer"><span>Est. <b>{hm(est)}</b></span><span style={{ color: 'var(--muted)' }}>Timer starts on accept</span></div>;
-  const isDoneOrLocked = t.status !== 'progress'; // timer only runs while in progress
-  return <div className={'timer' + (live ? ' live' : '') + (over ? ' over' : '')}><span>{live && <i className="dot"></i>}{t.status === 'changes' ? 'Paused' : isDoneOrLocked ? 'Took' : 'Running'} <b>{hm(taken)}</b></span><span>of est. <b>{hm(est)}</b>{over ? ' · over' : ''}</span></div>;
+
+  let activeCount = 0;
+  if (isMulti && t.user_timers) {
+    const timers = parseUserTimers(t.user_timers);
+    for (const uid of ids) {
+      if (timers[uid] && timers[uid].status === 'progress' && timers[uid].started_at) {
+        activeCount++;
+      }
+    }
+  }
+
+  if (!startedAt && effectiveStatus === 'pipeline') {
+    return (
+      <div className="timer">
+        <span>Est. <b>{hm(est)}</b></span>
+        <span style={{ color: 'var(--muted)' }}>
+          {isMulti && mine ? 'Your timer starts on accept' : 'Timer starts on accept'}
+          {isMulti && activeCount > 0 && <span style={{ marginLeft: 6, color: 'var(--ok, #4ADE95)', fontWeight: 500 }}>({activeCount}/{ids.length} active)</span>}
+        </span>
+      </div>
+    );
+  }
+
+  const isDoneOrLocked = effectiveStatus !== 'progress';
+  return (
+    <div className={'timer' + (live ? ' live' : '') + (over ? ' over' : '')}>
+      <span>
+        {live && <i className="dot"></i>}
+        {effectiveStatus === 'changes' ? 'Paused' : isDoneOrLocked ? 'Took' : 'Running'} <b>{hm(taken)}</b>
+        {isMulti && (
+          <span style={{ fontSize: 11, opacity: 0.8, marginLeft: 4 }}>
+            {mine ? '(Yours)' : `(${activeCount}/${ids.length} active)`}
+          </span>
+        )}
+      </span>
+      <span>of est. <b>{hm(est)}</b>{over ? ' · over' : ''}</span>
+    </div>
+  );
 }
 
 export function TasksScreen() {
@@ -208,9 +258,28 @@ export function TasksScreen() {
 
   const move = async (id, to) => {
     const t = d.tasks.find(x => x.id === id);
-    if (!t || t.status === to) return;
+    if (!t) return;
+    const isMulti = assigneeIds(t).length > 1;
+    const isMine = me?.id && assigneeIds(t).includes(me.id);
+    const uState = (isMulti && isMine) ? getUserTaskState(t, me.id) : null;
+    const prevUserStatus = uState ? uState.status : t.status;
+    if (prevUserStatus === to) return;
+
     const nowISO = new Date().toISOString();
     const optimisticPatch = { status: to, updated_at: nowISO };
+
+    if (isMulti && isMine && t.user_timers) {
+      const timers = parseUserTimers(t.user_timers);
+      const u = timers[me.id] || {};
+      timers[me.id] = {
+        ...u,
+        status: to,
+        started_at: to === 'progress' ? (u.started_at || nowISO) : u.started_at,
+        completed_at: (to === 'approval' || to === 'completed') ? nowISO : null
+      };
+      optimisticPatch.user_timers = JSON.stringify(timers);
+    }
+
     if (to === 'progress') {
       if (!t.started_at) {
         optimisticPatch.started_at = nowISO;
@@ -220,14 +289,14 @@ export function TasksScreen() {
       }
     } else if (to === 'approval') {
       optimisticPatch.completed_at = nowISO;
-      optimisticPatch.taken_mins = takenMins(t);
+      optimisticPatch.taken_mins = takenMins(t, Date.now(), me?.id);
     } else if (to === 'completed') {
       optimisticPatch.completed_at = nowISO;
       optimisticPatch.completed = todayISO();
       if (t.status === 'approval' && Number(t.taken_mins) > 0) {
         optimisticPatch.taken_mins = Number(t.taken_mins);
       } else {
-        optimisticPatch.taken_mins = takenMins(t);
+        optimisticPatch.taken_mins = takenMins(t, Date.now(), me?.id);
       }
     }
     if (d.updateTaskOptimistic) {
@@ -235,7 +304,7 @@ export function TasksScreen() {
     }
     try {
       await TaskModel.setStatus(id, to);
-      toast(to === 'progress' && t.status === 'pipeline' ? 'Accepted. Timer started.' : 'Moved to ' + STATUS_LABEL[to]);
+      toast(to === 'progress' && (prevUserStatus === 'pipeline' || t.status === 'pipeline') ? 'Accepted. Timer started.' : 'Moved to ' + STATUS_LABEL[to]);
       await d.reload('tasks', 'projects', 'activity', 'alerts');
     } catch (err) {
       toast(err.message);
@@ -308,7 +377,7 @@ export function TasksScreen() {
           </div>
         )}
         <div className="dates"><div><small>Assigned</small>{fmtD(t.assigned)}</div><div className={t.status === 'completed' ? 'ok' : ''} style={od ? { borderColor: 'rgba(255,92,122,.5)' } : undefined}><small>{t.status === 'completed' ? 'Completed' : 'Deadline'}</small>{fmtD(t.status === 'completed' ? (t.completed || t.deadline) : t.deadline)}</div></div>
-        <Timer t={t} now={now} />
+        <Timer t={t} now={now} currentUserId={me?.id} />
         <Assignees task={t} />
         {(acts.length > 0 || canReassign || canReject) && (
           <div className="move">
@@ -352,9 +421,15 @@ export function TasksScreen() {
 
   // ---- Mobile: a simple list with workflow buttons (the kanban board is desktop-only) ----
   if (isMobile) {
-    const mList = sortTasksByLatest(tasks.filter(t => mStatus === 'all' ? true : mStatus === 'open' ? t.status !== 'completed' : t.status === mStatus));
-    const mCounts = { open: tasks.filter(t => t.status !== 'completed').length, all: tasks.length };
-    STATUSES.forEach(k => { mCounts[k] = tasks.filter(t => t.status === k).length; });
+    const getTaskStatusForFilter = t => (tab === 'me' && me?.id && assigneeIds(t).length > 1)
+      ? (getUserTaskState(t, me.id)?.status || t.status)
+      : t.status;
+    const mList = sortTasksByLatest(tasks.filter(t => {
+      const s = getTaskStatusForFilter(t);
+      return mStatus === 'all' ? true : mStatus === 'open' ? s !== 'completed' : s === mStatus;
+    }));
+    const mCounts = { open: tasks.filter(t => getTaskStatusForFilter(t) !== 'completed').length, all: tasks.length };
+    STATUSES.forEach(k => { mCounts[k] = tasks.filter(t => getTaskStatusForFilter(t) === k).length; });
     return (
       <div className="content mtasks">
         <div className="mtasks-head">
@@ -370,12 +445,13 @@ export function TasksScreen() {
         {rangeBar}
         <div className="mtask-list">
           {mList.map(t => {
-            const od = overdue(t); const { acts, lead, mine, canManage, canReject } = actionsFor(t);
+            const od = overdue(t); const { acts, lead, mine, canManage, canReject, effectiveStatus } = actionsFor(t);
             const canReassign = (mine || lead || canManage) && t.status !== 'completed';
             const assignerName = t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : '');
+            const effStatus = (tab === 'me' && me?.id && assigneeIds(t).length > 1) ? effectiveStatus : t.status;
             return (
-              <div className={'mtask' + (t.status === 'completed' ? ' done' : od ? ' late' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id}>
-                <div className="mtask-top"><span className="mtask-proj">{t.project_name || d.projName(t.project)}</span><span className={'chip ' + (od ? 'pk' : t.status === 'completed' ? 'gr' : 'gy')}>{t.status === 'completed' ? 'Done ' + fmtD(t.completed || t.deadline) : 'Due ' + fmtD(t.deadline)}</span></div>
+              <div className={'mtask' + (effStatus === 'completed' ? ' done' : od ? ' late' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id}>
+                <div className="mtask-top"><span className="mtask-proj">{t.project_name || d.projName(t.project)}</span><span className={'chip ' + (od ? 'pk' : effStatus === 'completed' ? 'gr' : 'gy')}>{effStatus === 'completed' ? 'Done ' + fmtD(t.completed || t.deadline) : 'Due ' + fmtD(t.deadline)}</span></div>
                 <div className="mtask-title" role="button" onClick={() => setSheet(t.id)}>{t.title}</div>
                 {assignerName && (
                   <div style={{ fontSize: 11.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4, margin: '2px 0 4px' }}>
@@ -384,8 +460,8 @@ export function TasksScreen() {
                     {t.reassigned_by && <span style={{ color: 'var(--accent)', marginLeft: 4 }}>(⇄ Reassigned by {d.empName(t.reassigned_by)})</span>}
                   </div>
                 )}
-                <div className="mtask-row"><Assignees task={t} /><TaskChip status={t.status} /></div>
-                <div className="tcard" style={{ padding: 0, border: 0, background: 'none' }}><Timer t={t} now={now} /></div>
+                <div className="mtask-row"><Assignees task={t} /><TaskChip status={effStatus} /></div>
+                <div className="tcard" style={{ padding: 0, border: 0, background: 'none' }}><Timer t={t} now={now} currentUserId={me?.id} /></div>
                 <div className="mtask-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
                   {acts.slice(0, 2).map(([k, l, cls]) => <button key={k} className={cls === 'go' || cls === 'ok' ? 'mtask-done' : 'pill'} onClick={() => move(t.id, k)}>{l}</button>)}
                   {canReject && <button className="pill" onClick={() => reject(t)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,100,100,0.3)' }}>✕ Reject</button>}
@@ -425,7 +501,12 @@ export function TasksScreen() {
         {view === 'board' ? (
           <div className="board" ref={boardRef}>
             {STATUSES.map(k => {
-              const ts = sortTasksByLatest(tasks.filter(t => t.status === k)); return (
+              const ts = sortTasksByLatest(tasks.filter(t => {
+                const effectiveStatus = (tab === 'me' && me?.id && assigneeIds(t).length > 1)
+                  ? (getUserTaskState(t, me.id)?.status || t.status)
+                  : t.status;
+                return effectiveStatus === k;
+              })); return (
                 <div className={'col ' + COL_CLS[k] + (overCol === k ? ' over' : '')} key={k} onDragOver={ev => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; setOverCol(k); }} onDragLeave={ev => { if (ev.currentTarget.contains(ev.relatedTarget)) return; setOverCol(''); }} onDrop={ev => { ev.preventDefault(); const id = dragId || ev.dataTransfer.getData('text/plain'); setOverCol(''); setDragId(null); if (id) move(id, k); }}>
                   <div className="col-h">{STATUS_LABEL[k]}<span>{ts.length}</span></div>
                   {ts.map(card)}
@@ -439,11 +520,12 @@ export function TasksScreen() {
             <div className="task-row head"><span>Task</span><span>Assignee</span><span>Assigned by</span><span>Dates</span><span>Time</span><span>Status</span><span>Action</span></div>
             {listPager.items.map(t => {
               const od = overdue(t);
-              const { acts, lead, mine, canManage, canReject } = actionsFor(t);
+              const { acts, lead, mine, canManage, canReject, effectiveStatus } = actionsFor(t);
               const canReassign = (mine || lead || canManage) && t.status !== 'completed';
               const assignerName = t.assigned_by_name || (t.assigned_by ? d.empName(t.assigned_by) : '');
+              const effStatus = (tab === 'me' && me?.id && assigneeIds(t).length > 1) ? effectiveStatus : t.status;
               return (
-                <div className={'task-row' + (od ? ' late' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id}>
+                <div className={'task-row' + (effStatus === 'completed' ? '' : od ? ' late' : '') + (hl === t.id ? ' hl' : '')} data-task={t.id} key={t.id}>
                   <div><LinkBtn onClick={() => setSheet(t.id)} style={{ textAlign: 'left', fontWeight: 600 }}>{t.title}</LinkBtn><small>{t.project_name || d.projName(t.project)}{t.dept ? ' · ' + t.dept : ''}</small></div>
                   <div><Assignees task={t} /></div>
                   <div>
@@ -451,8 +533,8 @@ export function TasksScreen() {
                     {t.reassigned_by && <div style={{ fontSize: 11, color: 'var(--accent)' }}>⇄ Reassigned by {d.empName(t.reassigned_by)}</div>}
                   </div>
                   <div><small>Due {fmtD(t.deadline)}</small></div>
-                  <div><small>{hm(t.mins)}</small></div>
-                  <div><TaskChip status={t.status} /></div>
+                  <div><small>{hm((tab === 'me' && me?.id && assigneeIds(t).length > 1) ? userTakenMins(t, me.id, now) : (t.mins || takenMins(t, now)))}</small></div>
+                  <div><TaskChip status={effStatus} /></div>
                   <div className="move">
                     {acts.map(([k, l, cls]) => <button key={k} className={cls} onClick={() => move(t.id, k)}>{l}</button>)}
                     {canReject && <button type="button" className="pill" onClick={() => reject(t)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,100,100,0.3)', fontSize: 11, padding: '2px 8px' }}>✕ Reject</button>}

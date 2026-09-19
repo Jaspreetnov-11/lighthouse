@@ -22,6 +22,7 @@ const EXTRA_COLUMNS = {
     ['completed_at', 'TEXT'],
     ['taken_mins', 'NUMERIC DEFAULT 0'],
     ['spans', "TEXT DEFAULT '[]'"],
+    ['user_timers', "TEXT DEFAULT '{}'"],
     ['reassigned_by', "TEXT DEFAULT ''"],
     ['reassign_note', "TEXT DEFAULT ''"],
     ['created_at', "TEXT DEFAULT (datetime('now'))"],

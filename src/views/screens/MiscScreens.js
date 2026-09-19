@@ -11,7 +11,7 @@ import { THEMES, useTheme } from '@/controllers/useTheme';
 import { usePush } from '@/controllers/usePush';
 import { AdminControls } from '@/views/screens/AdminControls';
 import { Pager, usePager } from '@/views/ui/Pager';
-import { fmtD, inr, pct, SHIFTS } from '@/lib/format';
+import { fmtD, getUserTaskState, inr, pct, SHIFTS } from '@/lib/format';
 
 /** Buttons inside a notification: accept / approve a task, approve / reject a leave request. */
 function NotifActions({ n }) {
@@ -25,9 +25,11 @@ function NotifActions({ n }) {
     if (!t) return null;
     const mine = String(t.assignee || '').split(',').map(s => s.trim()).includes(me.id);
     const lead = d.isLeaderOf(t.project);
+    const uState = getUserTaskState(t, me.id);
+    const effectiveStatus = uState ? uState.status : t.status;
     return (
       <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
-        {t.status === 'pipeline' && mine && <button className="pill on" style={{ height: 28, fontSize: 11.5 }} disabled={busy} onClick={() => run(() => TaskModel.setStatus(t.id, 'progress'), 'Accepted. Timer started.')}>▶ Accept</button>}
+        {effectiveStatus === 'pipeline' && mine && <button className="pill on" style={{ height: 28, fontSize: 11.5 }} disabled={busy} onClick={() => run(() => TaskModel.setStatus(t.id, 'progress'), 'Accepted. Timer started.')}>▶ Accept</button>}
         {t.status === 'approval' && lead && <><button className="pill on" style={{ height: 28, fontSize: 11.5 }} disabled={busy} onClick={() => run(() => TaskModel.setStatus(t.id, 'completed'), 'Approved.')}>✓ Approve</button><button className="pill" style={{ height: 28, fontSize: 11.5 }} disabled={busy} onClick={() => run(() => TaskModel.setStatus(t.id, 'changes'), 'Changes requested.')}>Changes</button></>}
         {t.status === 'completed' && <Chip tone="gr">Completed</Chip>}
         <LinkBtn href={'/tasks?task=' + t.id}>Open</LinkBtn>

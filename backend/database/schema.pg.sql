@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS lh_tasks (
   reassigned_by TEXT DEFAULT '',
   reassign_note TEXT DEFAULT '',
   spans TEXT DEFAULT '[]',
+  user_timers TEXT DEFAULT '{}',
   created_at TEXT DEFAULT (now())::text,
   updated_at TEXT DEFAULT (now())::text
 );

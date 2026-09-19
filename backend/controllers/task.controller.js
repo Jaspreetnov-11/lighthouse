@@ -45,33 +45,189 @@ async function assertCanManage(req, projectId, task = null) {
   return project;
 }
 
+function parseUserTimers(v, assignees = []) {
+  let map = {};
+  if (v) {
+    try {
+      map = typeof v === 'string' ? JSON.parse(v) : (typeof v === 'object' && v !== null ? v : {});
+    } catch (e) {
+      map = {};
+    }
+  }
+  const ids = Array.isArray(assignees) ? assignees : splitIds(assignees);
+  const result = {};
+  for (const id of ids) {
+    result[id] = map[id] || { status: 'pipeline', started_at: null, completed_at: null, taken_mins: 0 };
+  }
+  return result;
+}
+
+function calculateUserMins(spans, empId, now = Date.now()) {
+  const nowMs = typeof now === 'number' ? now : Date.parse(now);
+  let totalMs = 0;
+  for (const sp of spans) {
+    if (sp && (!sp.u || sp.u === empId)) {
+      const s = Date.parse(sp.s);
+      const e = sp.e ? Date.parse(sp.e) : nowMs;
+      if (!isNaN(s) && !isNaN(e) && e > s) {
+        totalMs += (e - s);
+      }
+    }
+  }
+  return Math.round(totalMs / 60000);
+}
+
 /**
- * Fields that change when the status moves. The timer only runs while the task is "in progress":
- * a work span opens on accept / resume and closes the moment the task is submitted for approval,
- * so nobody's time keeps counting while they wait for a team leader.
+ * Fields that change when the status moves.
+ * Supports both single-assignee tasks and independent per-user timers for multi-assignee tasks.
  */
-function statusPatch(existing, status) {
-  const patch = { status };
+function statusPatch(existing, status, actorId = null) {
   const now = nowISO();
+  const assignees = splitIds(existing.assignee || existing.assignees);
+  const isMulti = assignees.length > 1;
+  const isAssigneeActor = isMulti && actorId && assignees.includes(actorId);
+
   let spans = worktime.parseSpans(existing);
-  if (!spans.length && existing.started_at) spans = [{ s: existing.started_at, e: existing.completed_at || (existing.status === 'progress' ? null : (existing.updated_at || now)) }];
-  for (const sp of spans) if (!sp.e) sp.e = now; // leaving "progress" (or re-entering it) closes the open span
+  if (!spans.length && existing.started_at) {
+    spans = [{ s: existing.started_at, e: existing.completed_at || (existing.status === 'progress' ? null : (existing.updated_at || now)) }];
+  }
+
+  // Multi-assignee: assignee starts, pauses, or finishes their own part
+  if (isAssigneeActor) {
+    const userTimers = parseUserTimers(existing.user_timers, assignees);
+    const uPrev = userTimers[actorId] || {};
+
+    // Close any open span for this specific user
+    for (const sp of spans) {
+      if ((!sp.u || sp.u === actorId) && !sp.e) sp.e = now;
+    }
+
+    if (status === 'pipeline') {
+      userTimers[actorId] = { status: 'pipeline', started_at: null, completed_at: null, taken_mins: 0 };
+      spans = spans.filter(sp => sp.u && sp.u !== actorId);
+    } else if (status === 'progress') {
+      spans.push({ s: now, u: actorId });
+      userTimers[actorId] = {
+        status: 'progress',
+        started_at: uPrev.started_at || now,
+        completed_at: null,
+        taken_mins: uPrev.taken_mins || 0
+      };
+    } else if (status === 'approval' || status === 'completed') {
+      const userMins = calculateUserMins(spans, actorId, now);
+      userTimers[actorId] = {
+        status,
+        started_at: uPrev.started_at || now,
+        completed_at: now,
+        taken_mins: userMins
+      };
+    } else if (status === 'changes') {
+      userTimers[actorId] = {
+        status: 'changes',
+        started_at: uPrev.started_at || now,
+        completed_at: null,
+        taken_mins: uPrev.taken_mins || 0
+      };
+    }
+
+    // Determine overall task status from all assignees
+    const statuses = assignees.map(id => userTimers[id]?.status || 'pipeline');
+    let overallStatus = 'pipeline';
+    if (statuses.every(s => s === 'completed')) {
+      overallStatus = 'completed';
+    } else if (statuses.every(s => s === 'approval' || s === 'completed')) {
+      overallStatus = 'approval';
+    } else if (statuses.some(s => s === 'progress')) {
+      overallStatus = 'progress';
+    } else if (statuses.some(s => s === 'changes')) {
+      overallStatus = 'changes';
+    } else if (statuses.some(s => s === 'approval')) {
+      overallStatus = 'progress';
+    }
+
+    const startedTimes = assignees.map(id => userTimers[id]?.started_at).filter(Boolean).sort();
+    const patch = {
+      status: overallStatus,
+      started_at: startedTimes[0] || null,
+      spans: JSON.stringify(spans),
+      user_timers: JSON.stringify(userTimers),
+      taken_mins: assignees.reduce((acc, id) => acc + (Number(userTimers[id]?.taken_mins) || 0), 0)
+    };
+
+    if (overallStatus === 'completed') {
+      patch.completed = todayISO();
+      patch.completed_at = now;
+    } else if (overallStatus === 'approval') {
+      patch.completed = null;
+      patch.completed_at = now;
+    } else {
+      patch.completed = null;
+      patch.completed_at = null;
+    }
+    return patch;
+  }
+
+  // Single-assignee OR Team Leader / Admin changing overall task
+  for (const sp of spans) if (!sp.e) sp.e = now;
+
+  const patch = { status };
+  let userTimers = isMulti
+    ? parseUserTimers(existing.user_timers, assignees)
+    : (assignees.length ? { [assignees[0]]: { status, started_at: existing.started_at, completed_at: existing.completed_at, taken_mins: existing.taken_mins || 0 } } : {});
+
   if (status === 'pipeline') {
     spans = [];
     patch.started_at = null; patch.completed = null; patch.completed_at = null; patch.taken_mins = 0;
+    for (const id of assignees) {
+      userTimers[id] = { status: 'pipeline', started_at: null, completed_at: null, taken_mins: 0 };
+    }
   } else if (status === 'progress') {
-    spans.push({ s: now });
+    if (isMulti) {
+      for (const id of assignees) {
+        if (!userTimers[id] || userTimers[id].status === 'pipeline') {
+          spans.push({ s: now, u: id });
+          userTimers[id] = { status: 'progress', started_at: now, completed_at: null, taken_mins: 0 };
+        }
+      }
+    } else {
+      spans.push({ s: now, u: assignees[0] || null });
+      if (assignees[0]) {
+        userTimers[assignees[0]] = { status: 'progress', started_at: userTimers[assignees[0]]?.started_at || now, completed_at: null, taken_mins: userTimers[assignees[0]]?.taken_mins || 0 };
+      }
+    }
     if (!existing.started_at) patch.started_at = now;
     patch.completed = null; patch.completed_at = null;
   } else if (status === 'approval') {
-    patch.completed = null; patch.completed_at = now; // submitted: timer stops here
+    patch.completed = null; patch.completed_at = now;
+    for (const id of assignees) {
+      if (userTimers[id]) {
+        userTimers[id].status = 'approval';
+        userTimers[id].completed_at = now;
+        userTimers[id].taken_mins = calculateUserMins(spans, id, now);
+      }
+    }
   } else if (status === 'completed') {
     patch.completed = todayISO();
-    patch.completed_at = existing.status === 'approval' && existing.completed_at ? existing.completed_at : now; // keep the submit time
+    patch.completed_at = existing.status === 'approval' && existing.completed_at ? existing.completed_at : now;
+    for (const id of assignees) {
+      if (userTimers[id]) {
+        userTimers[id].status = 'completed';
+        userTimers[id].completed_at = patch.completed_at;
+        userTimers[id].taken_mins = calculateUserMins(spans, id, now);
+      }
+    }
   } else if (status === 'changes') {
     patch.completed = null; patch.completed_at = null;
+    for (const id of assignees) {
+      if (userTimers[id]) {
+        userTimers[id].status = 'changes';
+        userTimers[id].completed_at = null;
+      }
+    }
   }
+
   patch.spans = JSON.stringify(spans);
+  patch.user_timers = JSON.stringify(userTimers);
   return patch;
 }
 
@@ -110,9 +266,28 @@ const createTask = catchAsync(async (req, res) => {
   if (!ids.length) throw new AppError('Assign the task to at least one person.', 400);
   if (deadline < assigned) throw new AppError('Deadline cannot be before the assigned date.', 400);
 
+  const initialUserTimers = {};
+  for (const uid of ids) {
+    initialUserTimers[uid] = { status: 'pipeline', started_at: null, completed_at: null, taken_mins: 0 };
+  }
+
   const id = 't_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
-  const base = { id, title, project, dept, assignee: ids.join(','), assigned_by: req.user.id, assigned, deadline, mins: Number(mins) || 0, type, flag: flag ? 1 : 0, status: 'pipeline', started_at: null, completed_at: null, taken_mins: 0 };
-  const task = await taskModel.create({ ...base, ...statusPatch(base, status) });
+  const base = {
+    id, title, project, dept,
+    assignee: ids.join(','),
+    assigned_by: req.user.id,
+    assigned, deadline,
+    mins: Number(mins) || 0,
+    type,
+    flag: flag ? 1 : 0,
+    status: 'pipeline',
+    started_at: null,
+    completed_at: null,
+    taken_mins: 0,
+    spans: '[]',
+    user_timers: JSON.stringify(initialUserTimers)
+  };
+  const task = await taskModel.create({ ...base, ...statusPatch(base, status, req.user.id) });
 
   const projName = projectRow ? projectRow.name : ((await projectModel.findById(project)) || {}).name || 'project';
   await notifyAssignees(ids, task, `New task assigned to you by ${req.user.name}: "${title}" (${projName}) · due ${deadline}`);
@@ -131,11 +306,17 @@ const updateTask = catchAsync(async (req, res) => {
     const ids = splitIds(updateData.assignee);
     if (!ids.length) throw new AppError('Assign the task to at least one person.', 400);
     updateData.assignee = ids.join(',');
+    const prevTimers = parseUserTimers(existing.user_timers, ids);
+    const nextTimers = {};
+    for (const uid of ids) {
+      nextTimers[uid] = prevTimers[uid] || { status: 'pipeline', started_at: null, completed_at: null, taken_mins: 0 };
+    }
+    updateData.user_timers = JSON.stringify(nextTimers);
   }
   if (updateData.flag !== undefined) updateData.flag = updateData.flag ? 1 : 0;
   if (updateData.mins !== undefined) updateData.mins = Number(updateData.mins) || 0;
   if (updateData.status && updateData.status !== existing.status) {
-    Object.assign(updateData, statusPatch(existing, updateData.status));
+    Object.assign(updateData, statusPatch(existing, updateData.status, req.user.id));
     if (updateData.status !== 'pipeline') updateData.taken_mins = await cappedTaken({ ...existing, ...updateData });
   }
   else delete updateData.status;
@@ -152,9 +333,20 @@ const updateTaskStatus = catchAsync(async (req, res) => {
   const { status } = req.body;
   const existing = await taskModel.findById(req.params.id);
   if (!existing) throw new AppError('Task not found', 404);
-  if (existing.status === status) return apiResponse.success(res, existing, 'No change');
 
-  const isAssignee = splitIds(existing.assignee).includes(req.user.id);
+  const ids = splitIds(existing.assignee);
+  const isMulti = ids.length > 1;
+  const isAssignee = ids.includes(req.user.id);
+  if (!isMulti && existing.status === status) return apiResponse.success(res, existing, 'No change');
+  if (isMulti && isAssignee) {
+    const currentTimers = parseUserTimers(existing.user_timers, ids);
+    if (currentTimers[req.user.id] && currentTimers[req.user.id].status === status) {
+      return apiResponse.success(res, existing, 'No change');
+    }
+  } else if (existing.status === status) {
+    return apiResponse.success(res, existing, 'No change');
+  }
+
   const isCreator = existing.assigned_by === req.user.id;
   const isAdminOrMgr = req.user.role === 'admin' || req.user.role === 'manager' || req.user.access === 'admin' || req.user.access === 'manager';
   let isLeader = isAdminOrMgr || isCreator;
@@ -168,14 +360,14 @@ const updateTaskStatus = catchAsync(async (req, res) => {
     throw new AppError('Only the assignee, team leader, or admin can move this task.', 403);
   }
 
-  const patch = statusPatch(existing, status);
-  if (status !== 'pipeline') patch.taken_mins = await cappedTaken({ ...existing, ...patch });
+  const patch = statusPatch(existing, status, req.user.id);
+  if (patch.status !== 'pipeline') patch.taken_mins = await cappedTaken({ ...existing, ...patch });
   const updated = await taskModel.update(existing.id, patch);
 
   const who = req.user.name;
-  const ids = splitIds(existing.assignee);
-  if (status === 'progress' && existing.status === 'pipeline') await activityModel.log(`${who} accepted "${existing.title}"`);
-  else if (status === 'approval') {
+  if (status === 'progress' && (existing.status === 'pipeline' || isMulti)) {
+    await activityModel.log(`${who} ${isMulti ? 'started working on' : 'accepted'} "${existing.title}"`);
+  } else if (status === 'approval') {
     await activityModel.log(`${who} submitted "${existing.title}" for approval`);
     if (existing.project) {
       const p = await projectModel.findById(existing.project);
@@ -236,13 +428,21 @@ const reassignTask = catchAsync(async (req, res) => {
     throw new AppError('Select at least one colleague (other than yourself) to reassign this task to.', 400);
   }
 
+  const initialUserTimers = {};
+  for (const uid of newIds) {
+    initialUserTimers[uid] = { status: 'pipeline', started_at: null, completed_at: null, taken_mins: 0 };
+  }
+
   const updated = await taskModel.update(existing.id, {
     assignee: newIds.join(','),
     reassigned_by: req.user.id,
     reassign_note: String(note || '').trim(),
     status: 'pipeline',
     started_at: null,
-    spans: '[]'
+    completed_at: null,
+    taken_mins: 0,
+    spans: '[]',
+    user_timers: JSON.stringify(initialUserTimers)
   });
 
   const who = req.user.name;
@@ -296,7 +496,10 @@ const rejectTask = catchAsync(async (req, res) => {
     reassign_note: '',
     status: 'pipeline',
     started_at: null,
-    spans: '[]'
+    completed_at: null,
+    taken_mins: 0,
+    spans: '[]',
+    user_timers: JSON.stringify({ [returnTo]: { status: 'pipeline', started_at: null, completed_at: null, taken_mins: 0 } })
   });
 
   const who = req.user.name;
@@ -375,5 +578,8 @@ module.exports = {
   deleteTask,
   reassignTask,
   rejectTask,
-  createSelfTask
+  createSelfTask,
+  parseUserTimers,
+  calculateUserMins,
+  statusPatch
 };
